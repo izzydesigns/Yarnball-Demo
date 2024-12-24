@@ -1,33 +1,7 @@
-// Math helpers
-/* @description A shorthand for BABYLON.Vector3.Zero(). */
-export let v0 = BABYLON.Vector3.Zero();
-let vec = function (x, y, z) {
-	return new BABYLON.Vector3(x, y, z);
-}
-let rotateVec2 = function (v, q) {
-	let matrix = new BABYLON.Matrix();
-	q.toRotationMatrix(matrix);
-	return BABYLON.Vector2.Transform(v, matrix);
-}
-let clampRadian = function (radianValue) {
-	let cyclesNumber;
-	if (radianValue < (-2 * Math.PI) || radianValue > (2 * Math.PI)) {
-		if (radianValue >= 0) {
-			cyclesNumber = Math.floor(radianValue / (2 * Math.PI));
-		} else {
-			cyclesNumber = Math.ceil(radianValue / (2 * Math.PI));
-		}
-		radianValue = radianValue - (cyclesNumber * (2 * Math.PI));
-	}
-	return radianValue;
-}
-let clampVector = function (vector3) {
-	return BABYLON.Vector3.FromArray([
-		clampRadian(vector3.x),
-		clampRadian(vector3.y),
-		clampRadian(vector3.z),
-	]);
-}
+import {game, player, scene} from "./main.js";
+
+// Helper/shorthand variables
+
 
 // Material helpers
 export function getRandomColor() {
@@ -56,68 +30,7 @@ export function createMat(mesh, diffuseCol, specularCol, emissiveCol, ambientCol
 }
 
 // Animation helpers
-// TODO: rewrite animation system in a better way (using player.animationState?)
-// Base animations off of player.movement variables
-// Blend specific animation transitions quicker/slower than others as necessary
-/* @description Plays a specific animation group by name */
-export const playAnimation = (name, scene) => {
-	const group = scene.animationGroups.find((g) => g.name === name);
-	if (group) {
-		group.start(true); // Loop animations
-		console.log(`▶️ Animation: ${name}`);
-	} else {console.warn(`Animation group "${name}" not found.`);}
-};
-/* @description Stops a specific animation group by name */
-export const stopAnimation = (name, scene) => {
-	const group = scene.animationGroups.find((g) => g.name === name);
-	if (group && group.isPlaying) {
-		group.stop();
-		if(debugMode)console.log(`🟥 Animation: ${name}`);
-	} else {console.warn(`Animation group "${name}" not found/not playing.`);}
-};
-/* @description Stops an animation after it completes */
-export const stopAnimAfterDone = (name, scene) => {
-	const group = scene.animationGroups.find((g) => g.name === name);
-	if (group && group.isPlaying) {// Wait until the animation ends, then stop it
-		group.onAnimationEndObservable.addOnce(() => {
-			group.stop();if(debugMode)console.log(`🟥 Animation (completed): ${name}`);
-		});
-	} else {console.warn(`Animation group "${name}" not found/not playing.`);}
-};
-/* @description Stops all animations for a specified mesh */
-export const stopAllAnimationsForMesh = (mesh, scene) => {
-	scene.animationGroups.forEach((group) => {
-		if (group.targetedAnimations.some((ta) => ta.target === mesh)) {
-			group.stop();if(debugMode)console.log(`🟥 Animation group: ${group.name}`);
-		}
-	});
-};
-/* @description Check if a specific animation group is currently playing */
-export const isAnimationPlaying = (name, scene) => {
-	const group = scene.animationGroups.find((g) => g.name === name);
-	if (group) {
-		if(debugMode)console.log(`${name} is ${group.isPlaying ? "▶️ playing" : "🟥 not playing"}`);
-		return group.isPlaying;
-	} else {
-		console.warn(`Animation group "${name}" not found.`);
-		return false;
-	}
-};
-let lastAnim = '';
-/* @description Animation handler, stops previous animation and plays requested one (if available) */
-/*export const playAnimation = (name, scene) => {
-	const group = scene.animationGroups.find((g) => g.name === name);
-	const lastGroup = scene.animationGroups.find((g) => g.name === lastAnim);
-	if (group) {
-		if(lastGroup) {
-			lastGroup.stop();
-			if(debugMode)console.log(`🟥 Animation: ${lastGroup}`);
-		}
-		group.start(true); // Loop animations
-		if(debugMode)console.log(`▶️ Animation: ${name}`);
-	} else {console.warn(`Animation group "${name}" not found.`);}
-	if(name.length > 0){lastAnim = name;}
-};*/
+// TODO: Put animation functions here? or somewhere else?
 
 // Mesh helpers
 /* @description Teleports 'mesh' to 'pos', and if 'keepVelocity' is specified, it will preserve it's velocity after teleporting */
@@ -128,31 +41,32 @@ export function teleportMesh(pos, mesh, keepVelocity) {
 		mesh.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, 0, 0));
 	}
 }
-export function checkCanJump(player, scene) {
-	const rayOrigin = player.body.position.clone(); // Center of player mesh
-	const rayDirection = BABYLON.Vector3.Down(); // Ray pointing downward
-	const rayLength = 0.5; // Half the player's height (adjust as needed)
-
-	const ray = new BABYLON.Ray(rayOrigin, rayDirection, rayLength);
-	const hit = scene.pickWithRay(ray);
+export function checkCanJump() {
+	const ray = new BABYLON.Ray(
+		player.body.position.clone(),// Center of player mesh
+		BABYLON.Vector3.Down(),// Ray pointing downward
+		0.25,// Half the player's height (adjust as needed)
+	);
+	const excludedMeshes = [player.mesh, player.body, scene.getMeshByName("catGeo")];
+	const predicate = (mesh) => !excludedMeshes.includes(mesh);
+	const hit = scene.pickWithRay(ray, predicate);
 
 	// Update player movement booleans based on when the player is touching the ground
-	if (hit.pickedMesh) {
-		//TODO: Fix this logic stuff to determine onGround = true, not all this
-		//console.log("colliding?");
-		if(!player.movement.canMove)player.movement.canMove = true;
-		if(!player.movement.canJump)player.movement.canJump = true;
-		if(player.movement.jumping)player.movement.jumping = false;
+	if (hit.hit) {
+		player.movement.canMove = true;
+		player.movement.canJump = true;
+		player.movement.onGround = true;
+		if(game.debugMode)console.log("Ray hit mesh:", hit.pickedMesh.name);
 	} else {
 		player.movement.canMove = false;
 		player.movement.canJump = false;
-		player.movement.isMoving = true;
-		//console.log("in the air???", player.movement.canMove);
+		player.movement.onGround = false;
+		if(game.debugMode)console.log("Ray did not hit any meshes");
 	}
 }
 
 // DEBUG helpers
-export function showAxisHelper(size, scene) {
+export function showAxisHelper(size) {
 	let makeTextPlane = (text, color, size) => {
 		let dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", 50, scene, true);
 		dynamicTexture.hasAlpha = true;
@@ -184,4 +98,3 @@ export function showAxisHelper(size, scene) {
 		new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3(0, 0.05 * size, size * 0.95)
 	], new BABYLON.Color3(0, 0, 1), "Z", new BABYLON.Vector3(0, 0.05 * size, 0.9 * size), "blue");
 }
-export let debugMode = true;
