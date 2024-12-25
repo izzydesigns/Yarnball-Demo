@@ -11,9 +11,12 @@ export const scene = new BABYLON.Scene(engine);// This creates a basic Babylon S
 export let game = {
 	controls: {
 		forward: "KeyW",left: "KeyA",back: "KeyS",right: "KeyD",
-		jump: "Space",
+		jump: "Space",sprint: "ShiftLeft",
 		developerMenu: "Tab",
 	},
+	time: 0,
+	lastFrameTime: 0,
+	frameRateLimit: (1000 / 60),
 	debugMode: false,
 	colliders: null,
 	shadowGenerator: null,
@@ -25,55 +28,32 @@ export let player = {
 	movement: {
 		onGround: false,
 		canMove: true,
-		canJump: true,
+		canJump: false,
 		isMoving: false,
 		jumping: false,
+		sprinting: false,
 		forward: false,
 		back: false,
 		left: false,
 		right: false,
 	},
-	moveSpeed: 5,
+	curMoveSpeed: 1,
+	defaultMoveSpeed: 1,
+	sprintSpeed: 3,
 	maxVelocity: 10,
-	velocity: BABYLON.Vector3.Zero(),
 	speed: 0,
-	jumpHeight: 2,
+	jumpHeight: 3.5,
 	movementDirection: BABYLON.Vector3.Zero(),
 	curAnimation: "cat_idleStandA",
 	camera: new BABYLON.ArcRotateCamera(
 		"camera",
 		Math.PI / 2,  // Alpha (horizontal rotation)
 		Math.PI / 3,  // Beta (vertical rotation)
-		10,           // Radius (distance from the target)
+		6,           // Radius (distance from the target)
 		undefined, // Target (initialized later)
 		scene
 	),
 };
-
-/*
-TODO LIST
-- Continue working on movement system, debug glitchy jump & rotation bugs
-	Fix sudden acceleration when moving in any direction, make it gradual (lerp it?)
-	Fix jump not preserving directional speed while other keys are held, maybe due to tiny collision occuring at the frame the jump happens?
-	Explore buggy rotation due to collisions with player.body affecting rotation & not overriding
-	Determine what kind of jump mechanic we want (possibly hold space to generate jump line previewing jump trajectory?)
-- Redo animation system and prevent animation overlap unless desired
-	Use player.curAnimation to change between last and new animation. Init player model default anim
-	Enable animation smoothing after stopping animations and starting new ones.
-- Enable shadows from all valid light sources in the scene
-	Debug issues with shadowGenerator seemingly not working (entire scene is pitch black without the HemisphericLight on)
-- Implement basic modular UI screen overlay system
-	Add a basic main menu scene with simple UI
-	Add in-game HUD overlay (for debugging purposes initially)
-- Create basic starting level with simple physics objects
-	Physics objects such as cubes, spheres, and cylinders first, then custom meshes with boundingboxes
-- Add "swat" mechanic via tying a physicsImpostor to specific bone in player's arm and playing animation.
-	Set collision properties for player's arm to solid ONLY when swatting action is taking place
-- Implement a simple sound system
-	Add some kind of footstep sound
-	Add sound when player jumps
-	Add sound when player collides with object? (maybe a little meow)
-*/
 
 // TODO: Possibly move createScene function code into utils.js or further segment code into chunks
 const createScene = async () => {
@@ -102,7 +82,7 @@ const createScene = async () => {
 	game.shadowGenerator.blurScale = 1;//default 2
 	game.shadowGenerator.blurBoxOffset = 1;//default 1, -1 to 1 */
 
-	// LOAD WORLD GEOMETRY AND MESHES
+	// LOAD WORLD MESHES & PHYSICSIMPOSTORS
 	let groundMesh = BABYLON.MeshBuilder.CreateBox("ground", {width: 50, height: 5, depth: 50}, scene);
 	let groundMat = new BABYLON.StandardMaterial("myMaterial", scene);
 	groundMat.diffuseColor = BABYLON.Color3.FromHexString("#44aa33");
@@ -123,16 +103,19 @@ const createScene = async () => {
 		let randSizeX = obSizeRange[0][0] + (Math.random() * (obSizeRange[0][1]-obSizeRange[0][0]));
 		let randSizeY = obSizeRange[1][0] + (Math.random() * (obSizeRange[1][1]-obSizeRange[1][0]));
 		let randSizeZ = obSizeRange[2][0] + (Math.random() * (obSizeRange[2][1]-obSizeRange[2][0]));
-		//console.log(randSizeX);
 		let curObst = BABYLON.MeshBuilder.CreateBox("obst_"+i, {width: randSizeX, height: randSizeY, depth: randSizeZ}, scene);
-		let curObx = Math.random() * obRange[0], curOby = Math.random() * obRange[1], curObz = Math.random() * obRange[2];
-		curObst.physicsImpostor = new BABYLON.PhysicsImpostor(curObst, BABYLON.PhysicsImpostor.BoxImpostor, { mass: 0, friction: 0.75, restitution: 0.3 }, scene);
+		let curObx = Math.random() * obRange[0], curOby = 10 + Math.random() * obRange[1], curObz = Math.random() * obRange[2];
+		curObst.physicsImpostor = new BABYLON.PhysicsImpostor(
+			curObst, BABYLON.PhysicsImpostor.BoxImpostor, {
+			mass: 4, friction: 0.75, restitution: 0.3
+			}, scene
+		);
 		curObst.position = new BABYLON.Vector3(curObx - (obRange[0]/2), curOby, curObz - (obRange[2]/2));
 		utils.createMat(curObst, curObstCol);
 	}
 
 	// Load player mesh into player.mesh & create physicsImpostor for player.body
-	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_full.glb", scene, undefined, undefined, "playermodel").then((result) => {
+	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_full.glb", scene, undefined, undefined, "playerMesh").then((result) => {
 		player.mesh = result.meshes[0];// Initialize player.mesh with loaded mesh
 		player.mesh.scaling = new BABYLON.Vector3(2, 2, 2);
 		player.mesh.skeleton = scene.getSkeletonByName("Cat model");// Init & store skeleton object
@@ -145,7 +128,7 @@ const createScene = async () => {
 	player.body.physicsImpostor = new BABYLON.PhysicsImpostor(
 		player.body,
 		BABYLON.PhysicsImpostor.BoxImpostor, // Choose the appropriate shape
-		{ mass: 1, friction: 0, restitution: 0 },      // Adjust mass and physics properties
+		{ mass: 2, friction: 0, restitution: 0 },      // Adjust mass and physics properties
 		scene
 	);
 	player.body.isVisible = game.debugMode;
@@ -164,17 +147,19 @@ const createScene = async () => {
 
 
 	// Store all initialized physics colliders/impostors inside game object (update this as more are added to the scene)
-	//game.colliders = scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor);
+	// TODO: If adding more physicsImpostors outside of the createScene function, update game.colliders value
+	game.colliders = scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor);
 
-	// Handle & enable debug helpers
+	// Init debug helpers
 	if(game.debugMode) {
 		utils.showAxisHelper(10, scene);
 		console.log("Skeletons: ", scene.skeletons);
 		console.log("AnimGroups: ", scene.animationGroups);
 	}
 
-	// Register user inputs and handle them in 'input.js'
-	inputs.inputHandler();
+	// Register user input handlers and init window event handlers
+	inputs.initWindowFunctions();
+	inputs.initEventListeners();
 
 	return scene;
 };
@@ -183,8 +168,16 @@ const createScene = async () => {
 createScene().then((scene) => {
 	// BEFORE scene renders frame (avoid putting code here as much as possible)
 	scene.onBeforeRenderObservable.add(() => {
-		movement.applyInputMovement();
-		movement.applyRotation();
+		game.time = performance.now();
+		const deltaTime = game.time - game.lastFrameTime;
+		if (deltaTime > game.frameRateLimit) {
+			// PUT LOGIC HANDLING CODE HERE, LIMITED TO 60FPS
+			movement.handleMovement();
+			game.lastFrameTime = game.time - (deltaTime % game.frameRateLimit);
+		}
+		movement.handleRotation(); // Handle rotation every frame
+		movement.syncMeshAndBody();
+		utils.checkCanJump();// Checks if onGround every frame & sets onGround, canMove, and canJump
 	});
 
 	// ON FRAME RENDER (avoid putting code here as much as possible)
@@ -193,9 +186,10 @@ createScene().then((scene) => {
 	});
 
 	// BEFORE PHYSICS CALCULATION for player body physicsImpostor
-	player.body.physicsImpostor.registerBeforePhysicsStep(() => {
-
-	});
+	/*player.body.physicsImpostor.registerBeforePhysicsStep((impostor) => {
+		// Bugged, only detects "playerBody" physicsImpostor (...itself?)
+		console.log("About to collide with: ", impostor.object.name);
+	});*/
 
 	// player body ON PHYSICS COLLIDE with other physicsImpostors
 	player.body.physicsImpostor.registerOnPhysicsCollide(scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor), (collider, collidedAgainst) => {

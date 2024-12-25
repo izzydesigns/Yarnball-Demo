@@ -31,23 +31,44 @@ export function createMat(mesh, diffuseCol, specularCol, emissiveCol, ambientCol
 
 // Animation helpers
 // TODO: Put animation functions here? or somewhere else?
+export function playAnimation(animName, animSpeed=1){
+	let curAnimState = player.curAnimation;
+	if(animName !== curAnimState){
+		//stop player.curAnimation animation
+		//play animName animation at animSpeed
+	}else{
+		//can't play the same animation twice
+		//unless re-starting animation cycle...
+		//must be done smoothly tho?
+	}
+}
 
 // Mesh helpers
 /* @description Teleports 'mesh' to 'pos', and if 'keepVelocity' is specified, it will preserve it's velocity after teleporting */
 export function teleportMesh(pos, mesh, keepVelocity) {
 	mesh.position = pos;
-	if (!keepVelocity) {
+	if (!keepVelocity && mesh.physicsImpostor) {
 		mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
 		mesh.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, 0, 0));
 	}
 }
+export function teleportPlayer(pos, keepVelocity) {
+	player.mesh.position = pos;
+	player.body.position = pos;
+	if (!keepVelocity) {
+		player.body.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+		player.body.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, 0, 0));
+	}
+}
+/* @description Casts ray below player and sets player 'canMove', 'canJump', and 'onGround' = true if hit detected */
 export function checkCanJump() {
+	// TODO: Improve this function in order to allow traversal of sloped surfaces
 	const ray = new BABYLON.Ray(
 		player.body.position.clone(),// Center of player mesh
 		BABYLON.Vector3.Down(),// Ray pointing downward
-		0.25,// Half the player's height (adjust as needed)
+		(0.2 + 0.02),// Half the player's height (adjust as needed) plus tiny buffer for slopes
 	);
-	const excludedMeshes = [player.mesh, player.body, scene.getMeshByName("catGeo")];
+	const excludedMeshes = [player.body,scene.getMeshByName("catGeo") /* TODO: REPLACE THIS (tied to 3d model mesh name???) */];
 	const predicate = (mesh) => !excludedMeshes.includes(mesh);
 	const hit = scene.pickWithRay(ray, predicate);
 

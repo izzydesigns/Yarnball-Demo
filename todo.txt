@@ -1,0 +1,42 @@
+TODO LIST:
+- Redo animation system and prevent animation overlap unless desired
+	Use player.curAnimation to change between last and new animation
+	Init/play idle anim instead of default walking anim when mesh is loaded (or stop anim, handle later?)
+	Enable animation smoothing for all animations, at all times (on player mesh at least)
+	    (Relevant code: main.js - 123, utils.js - 35)
+	Look into possibly tying animation frames/speeds to specific events (control specific frames of animations)
+        Coorelate walk and run animation speed to player speed value, for example...
+- Enable shadows from all valid light sources in the scene
+	Debug issues with shadowGenerator seemingly not working (entire scene is pitch black without the HemisphericLight on)
+- Implement basic modular UI screen overlay system
+	Add a basic main menu scene with simple UI
+	Add in-game HUD overlay (for debugging purposes initially)
+- Create basic starting level with simple physics objects
+	Look into creating multiple "scenes" at this point, for different levels and such? (or create sceneLoader function)
+	Physics objects such as cubes, spheres, and cylinders first, then custom meshes with boundingboxes
+- Add "swat" mechanic via tying small physicsImpostor to bone in player arm, then playing the animation.
+	Set collision properties for player's arm to solid ONLY when swatting action is taking place
+	Ensure the arm physicsImpostor is in an entirely separate collision group from player body
+- Implement a simple sound system
+	Add some kind of footstep sound
+	Add sound when player jumps
+	Add sound when player collides with object? (maybe a little meow)
+- Further improve movement system
+    Add jumping in-place (currently ties horizontal velo magnitude to Y axis, so easy fix)
+	Add sneaking (alter player's hitbox height, check if player can uncrouch safely or not also)
+	Possibly change jump to hold space = generate line previewing trajectory, and let go to jump?
+
+
+
+COMPLETED:
+- Create basic movement mechanics system
+[x] Define what kind of movement mechanics I want, fluid movement? precise movement?
+[x] Create simple input handler to detect when movement keys are being pressed
+[x] Apply movement forces when movement is detected (and player.canMove = true, onGround = true, etc)
+[x] Write function to determine when player is onGround and set player.onGround accordingly
+[x] Add basic jumping
+- Continue working on movement system, debug glitchy jump & rotation bugs
+[x] Fix sudden acceleration when moving in any direction, make it gradual (lerp it?)
+[x] Fix jump not preserving directional speed while other keys are held, maybe due to tiny collision occuring at the frame the jump happens?
+[x] Explore buggy rotation due to collisions with player.body affecting rotation & not overriding
+[x] Determine what kind of jump mechanic we want (possibly hold space to generate jump line previewing jump trajectory?)
