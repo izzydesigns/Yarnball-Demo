@@ -82,6 +82,9 @@ function determineAnimationState() {
 
         // Handle player.speed changing which animations to use while onGround
         switch (player.movement.onGround) {
+            case player.movement.readyJump && player.movement.onGround && player.speed <= 0.1:
+                if(gameSettings.debugMode) console.log("Player ready to jump");
+                return animationData.jumpHighIdle;
             case player.speed <= gameSettings.defaultMoveSpeed && player.speed > 0:
                 if(gameSettings.debugMode) console.log("Player walking");
                 return animationData.walk;
@@ -91,9 +94,6 @@ function determineAnimationState() {
             case player.speed >= gameSettings.defaultSprintSpeed:
                 if(gameSettings.debugMode) console.log("Player sprinting");
                 return animationData.gallop;
-            case player.movement.readyJump && player.movement.onGround && player.speed <= gameSettings.defaultSprintSpeed:
-                if(gameSettings.debugMode) console.log("Player ready to jump");
-                return animationData.jumpHighIdle;
             default:
                 // If nothing else has returned by now, we must be idling...
                 if(gameSettings.debugMode) console.log("Player idling");

@@ -20,7 +20,7 @@ export let game = {
 };
 export const gameSettings = {
 	defaultMoveSpeed: 1,
-	defaultMoveAccelerate: 0.05,
+	defaultMoveAccelerate: 0.025,
 	defaultSprintSpeed: 3,
 	defaultJumpHeight: 3.5,
 	defaultMaxVelocity: 10,
@@ -139,7 +139,7 @@ const createScene = async () => {
 	animation.initAnimations();
 	inputs.initWindowFunctions();
 	inputs.initKeyboardListeners();
-	
+
 	return scene;
 };
 
