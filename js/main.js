@@ -1,6 +1,7 @@
 import * as utils from "./utils.js";
 import * as inputs from "./input.js";
 import * as movement from "./movement.js";
+import * as animation from "./animation.js";
 
 export const canvas = /** @type {HTMLCanvasElement} */ document.getElementById("renderCanvas"); // Get canvas element
 export const engine = new BABYLON.Engine(canvas, true, {
@@ -8,19 +9,32 @@ export const engine = new BABYLON.Engine(canvas, true, {
 	/* For testing shaders, enable: preserveDrawingBuffer: true,stencil: true,disableWebGL2Support: false*/
 });// Init 3D engine
 export const scene = new BABYLON.Scene(engine);// This creates a basic Babylon Scene object (non-mesh)
-export let game = {
+export const gameSettings = {
+	defaultMoveSpeed: 1,
+	defaultMoveAccelerate: 0.05,
+	defaultSprintSpeed: 3,
+	defaultJumpHeight: 3.5,
+	defaultMaxVelocity: 10,
+	defaultFriction: 0.15, //1 being zero friction, 0 being instant friction
+	defaultIdleAnimation: ["cat_idleStandA"],
+	defaultCameraDistance: 3,
+	defaultPlayerMass: 2,
+	defaultRotationSpeed: 0.025,
+	defaultGravity: new BABYLON.Vector3(0, -9.81, 0), // Set gravity
 	controls: {
 		forward: "KeyW",left: "KeyA",back: "KeyS",right: "KeyD",
 		jump: "Space",sprint: "ShiftLeft",
 		developerMenu: "Tab",
 	},
+	debugMode: false,
+}
+export let game = {
 	time: 0,
 	lastFrameTime: 0,
 	frameRateLimit: (1000 / 60),
-	debugMode: false,
-	colliders: null,
-	shadowGenerator: null,
-	defaultGravity: new BABYLON.Vector3(0, -9.81, 0), // Set gravity
+	colliders: [],
+	shadowGenerator: [],// TODO: Use this for each light source's `shadowGenerator`
+	animations: [],
 };
 export let player = {
 	mesh: null, //initialized below
@@ -31,25 +45,28 @@ export let player = {
 		canJump: false,
 		isMoving: false,
 		jumping: false,
+		readyJump: false,
 		sprinting: false,
 		forward: false,
 		back: false,
 		left: false,
 		right: false,
 	},
-	curMoveSpeed: 1,
-	defaultMoveSpeed: 1,
-	sprintSpeed: 3,
-	maxVelocity: 10,
+	curMoveSpeed: gameSettings.defaultMoveSpeed,
+	lastMoveSpeed: 0,
+	sprintSpeed: gameSettings.defaultSprintSpeed,
+	maxVelocity: gameSettings.defaultMaxVelocity,
 	speed: 0,
-	jumpHeight: 3.5,
+	jumpHeight: gameSettings.defaultJumpHeight,
 	movementDirection: BABYLON.Vector3.Zero(),
-	curAnimation: "cat_idleStandA",
+	curAnimation: gameSettings.defaultIdleAnimation,
+	lastAnimation: null,
+	isAnimTransitioning: false,
 	camera: new BABYLON.ArcRotateCamera(
 		"camera",
 		Math.PI / 2,  // Alpha (horizontal rotation)
 		Math.PI / 3,  // Beta (vertical rotation)
-		6,           // Radius (distance from the target)
+		gameSettings.defaultCameraDistance,           // Radius (distance from the target)
 		undefined, // Target (initialized later)
 		scene
 	),
@@ -58,7 +75,11 @@ export let player = {
 // TODO: Possibly move createScene function code into utils.js or further segment code into chunks
 const createScene = async () => {
 	// PHYSICS AND GRAVITY
-	scene.enablePhysics(game.defaultGravity, new BABYLON.CannonJSPlugin()); // Using Cannon.js for physics
+	/* See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep */
+	let physEngine = new BABYLON.CannonJSPlugin(false);
+	scene.enablePhysics(gameSettings.defaultGravity, physEngine); // Using Cannon.js for physics
+	physEngine.setTimeStep(1 / 60);
+	engine.renderEvenInBackground = false;
 
 	// CAMERA
 	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
@@ -83,44 +104,27 @@ const createScene = async () => {
 	game.shadowGenerator.blurBoxOffset = 1;//default 1, -1 to 1 */
 
 	// LOAD WORLD MESHES & PHYSICSIMPOSTORS
+
+	// Create ground object
 	let groundMesh = BABYLON.MeshBuilder.CreateBox("ground", {width: 50, height: 5, depth: 50}, scene);
 	let groundMat = new BABYLON.StandardMaterial("myMaterial", scene);
 	groundMat.diffuseColor = BABYLON.Color3.FromHexString("#44aa33");
-	groundMesh.receiveShadows = true;
 	groundMesh.position.y = 0;
 	groundMesh.material = groundMat;
 	groundMesh.checkCollisions = true; // Enable collision detection
-	groundMesh.physicsImpostor = new BABYLON.PhysicsImpostor(
-		groundMesh,	BABYLON.PhysicsImpostor.BoxImpostor, {
-			mass: 0, friction: 0.95, restitution: 0.05
-		}, scene
-	);
+	groundMesh.physicsImpostor = new BABYLON.PhysicsImpostor(groundMesh, BABYLON.PhysicsImpostor.BoxImpostor, {mass: 0, friction: 0.5, restitution: 0}, scene);
 
-	// Generate random platforms for testing player movement
-	let obstacleCount = 100, obRange = [25, 5, 25], obSizeRange = [[0.1, 5], [0.1, 0.1], [0.1, 5]];
-	for(let i=0;i<obstacleCount;i++){
-		let curObstCol = utils.newColor(utils.getRandomColor());
-		let randSizeX = obSizeRange[0][0] + (Math.random() * (obSizeRange[0][1]-obSizeRange[0][0]));
-		let randSizeY = obSizeRange[1][0] + (Math.random() * (obSizeRange[1][1]-obSizeRange[1][0]));
-		let randSizeZ = obSizeRange[2][0] + (Math.random() * (obSizeRange[2][1]-obSizeRange[2][0]));
-		let curObst = BABYLON.MeshBuilder.CreateBox("obst_"+i, {width: randSizeX, height: randSizeY, depth: randSizeZ}, scene);
-		let curObx = Math.random() * obRange[0], curOby = 10 + Math.random() * obRange[1], curObz = Math.random() * obRange[2];
-		curObst.physicsImpostor = new BABYLON.PhysicsImpostor(
-			curObst, BABYLON.PhysicsImpostor.BoxImpostor, {
-			mass: 4, friction: 0.75, restitution: 0.3
-			}, scene
-		);
-		curObst.position = new BABYLON.Vector3(curObx - (obRange[0]/2), curOby, curObz - (obRange[2]/2));
-		utils.createMat(curObst, curObstCol);
-	}
+	// Spawn 100 random platforms with zero mass (static props)
+	utils.generateRandomPlatforms(100, 0);// Set mass above zero to enable physics
 
 	// Load player mesh into player.mesh & create physicsImpostor for player.body
-	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_full.glb", scene, undefined, undefined, "playerMesh").then((result) => {
+	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_full.glb", scene, undefined, undefined).then((result) => {
 		player.mesh = result.meshes[0];// Initialize player.mesh with loaded mesh
 		player.mesh.scaling = new BABYLON.Vector3(2, 2, 2);
-		player.mesh.skeleton = scene.getSkeletonByName("Cat model");// Init & store skeleton object
+		player.mesh.skeleton = scene.getSkeletonByName("Player");// Init & store skeleton object
 		player.mesh.skeleton.enableBlending(1);
 		player.camera.setTarget(player.mesh);// Set camera target to player mesh after being loaded
+		result.meshes[1].name = result.meshes[1].id = "playerMesh"; // Manually set mesh name & id to playerMesh
 	});
 	// TODO: adjust bounding box height for dif animations? aka jumping, crouch, etc
 	player.body = BABYLON.MeshBuilder.CreateBox("playerBody",{width: 0.175, height: 0.4, depth: 0.6},scene);
@@ -128,36 +132,17 @@ const createScene = async () => {
 	player.body.physicsImpostor = new BABYLON.PhysicsImpostor(
 		player.body,
 		BABYLON.PhysicsImpostor.BoxImpostor, // Choose the appropriate shape
-		{ mass: 2, friction: 0, restitution: 0 },      // Adjust mass and physics properties
+		{ mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0 },      // Adjust mass and physics properties
 		scene
 	);
-	player.body.isVisible = game.debugMode;
-
-	// INITIALIZE ANIMATION HANDLING
-	// TODO: Initialize animation handling here?
-
-	// ANIMATION BLENDING (blends ALL loaded anims in the scene)
-	for (let animCounter = 0; animCounter < scene.animationGroups.length; animCounter++) {
-		for (let index = 0; index < scene.animationGroups[animCounter].targetedAnimations.length; index++) {
-			let animation = scene.animationGroups[animCounter].targetedAnimations[index].animation
-			animation.enableBlending = true;
-			animation.blendingSpeed = 0.1;
-		}
-	}
-
+	player.body.isVisible = gameSettings.debugMode;
 
 	// Store all initialized physics colliders/impostors inside game object (update this as more are added to the scene)
-	// TODO: If adding more physicsImpostors outside of the createScene function, update game.colliders value
+	// TODO: If adding more physicsImpostors outside of this `createScene` function, update the game.colliders to contain all new `physicsImpostor`s
 	game.colliders = scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor);
 
-	// Init debug helpers
-	if(game.debugMode) {
-		utils.showAxisHelper(10, scene);
-		console.log("Skeletons: ", scene.skeletons);
-		console.log("AnimGroups: ", scene.animationGroups);
-	}
-
-	// Register user input handlers and init window event handlers
+	// REGISTER INPUT, WINDOW, & ANIMATION HANDLERS
+	animation.initAnimations();
 	inputs.initWindowFunctions();
 	inputs.initEventListeners();
 
@@ -166,18 +151,18 @@ const createScene = async () => {
 
 // Run scene functions AFTER createScene() is finished
 createScene().then((scene) => {
-	// BEFORE scene renders frame (avoid putting code here as much as possible)
+	// BEFORE scene renders frame (maxes out at monitor refresh rate)
 	scene.onBeforeRenderObservable.add(() => {
 		game.time = performance.now();
 		const deltaTime = game.time - game.lastFrameTime;
 		if (deltaTime > game.frameRateLimit) {
-			// PUT LOGIC HANDLING CODE HERE, LIMITED TO 60FPS
-			movement.handleMovement();
 			game.lastFrameTime = game.time - (deltaTime % game.frameRateLimit);
+			// PUT CODE HERE TO BE EXECUTED @ 60FPS
+			movement.handleMovement();
+			movement.handleRotation();
 		}
-		movement.handleRotation(); // Handle rotation every frame
+		animation.handleAnimations();
 		movement.syncMeshAndBody();
-		utils.checkCanJump();// Checks if onGround every frame & sets onGround, canMove, and canJump
 	});
 
 	// ON FRAME RENDER (avoid putting code here as much as possible)
@@ -193,6 +178,6 @@ createScene().then((scene) => {
 
 	// player body ON PHYSICS COLLIDE with other physicsImpostors
 	player.body.physicsImpostor.registerOnPhysicsCollide(scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor), (collider, collidedAgainst) => {
-		if(game.debugMode)console.log("Collided against: ",collidedAgainst.object.name);
+
 	});
 });
