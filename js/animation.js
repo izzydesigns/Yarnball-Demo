@@ -1,5 +1,9 @@
 import {player, scene, gameSettings, game} from "./main.js";
 
+/**
+ * @description Object containing raw `animationGroup` names, multiple animation names provided to specify which animations have a follow-up animation that must be played upon completion
+ * @type {{crawl: string[], crouchToStand: string[], gallop: string[], idleCrouch: string[], jumpHighIdle: string[], idleLaying: string[], idleSit: string[], idleSitClean: string[], idleSleep: string[], idleStand: string[], idleStandClean: string[], jump: string[], jumpHigh: string[], pull: string[], push: string[], sitToStand: string[], standToCrouch: string[], standToGallop: string[], standToJumpHighIdle: string[], standToSit: string[], standToTrot: string[], standToWalk: string[], turnLeft180: string[], turnLeft45: string[], turnLeft90: string[], turnRight180: string[], turnRight45: string[], turnRight90: string[], attack: string[], trot: string[], walk: string[], walkToStand: string[], walkToTrot: string[]}}
+ */
 export const animationData = {
     // Player animation list: [animationGroup.name, nextAnimation?]
     crawl: ["cat_crawl"],
@@ -36,8 +40,9 @@ export const animationData = {
     walkToStand: ["cat_walk_toStandA", "cat_idleStandA"],
     walkToTrot: ["cat_walk_toTrot", "cat_trot"],
 };
-
-// Used to apply specific qualities to all/some animations (possibly useful for assigning default animation weights)
+/**
+ * @description Used to apply specific qualities to all/some animations (mainly used to assign default animation weight & blending status)
+ */
 export function initAnimations() {
     for (let animations of scene.animationGroups) game.animations.push(animations.name)
 
@@ -48,20 +53,16 @@ export function initAnimations() {
             if (curAnim) {
                 curAnim.weight = 0;
                 curAnim.enableBlending = true;
-                curAnim.blendingSpeed = 0.1;
+                curAnim.blendingSpeed = gameSettings.defaultAnimBlendValue;
             }
         }
     }
 }
-
-// Returns which player animation should be playing based on the player's data
+/**
+ * @description Returns which player animation should be playing based on the player's data
+ */
 function determineAnimationState() {
     if(player.curAnimation !== player.lastAnimation) {
-        // Handle prepare to jump animation
-        if(player.movement.readyJump && player.movement.onGround && player.speed <= gameSettings.defaultSprintSpeed){
-            return animationData.jumpHighIdle;
-        }
-
         // Handle jumping/falling animations
         if(!player.movement.onGround){
             if(player.movement.jumping){
@@ -81,15 +82,18 @@ function determineAnimationState() {
 
         // Handle player.speed changing which animations to use while onGround
         switch (player.movement.onGround) {
-            case player.speed < gameSettings.defaultMoveSpeed && player.speed > 0:
+            case player.speed <= gameSettings.defaultMoveSpeed && player.speed > 0:
                 if(gameSettings.debugMode) console.log("Player walking");
                 return animationData.walk;
-            case player.speed >= gameSettings.defaultMoveSpeed && player.speed < gameSettings.defaultSprintSpeed:
+            case player.speed > gameSettings.defaultMoveSpeed && player.speed < gameSettings.defaultSprintSpeed:
                 if(gameSettings.debugMode) console.log("Player trotting");
                 return animationData.trot;
             case player.speed >= gameSettings.defaultSprintSpeed:
                 if(gameSettings.debugMode) console.log("Player sprinting");
                 return animationData.gallop;
+            case player.movement.readyJump && player.movement.onGround && player.speed <= gameSettings.defaultSprintSpeed:
+                if(gameSettings.debugMode) console.log("Player ready to jump");
+                return animationData.jumpHighIdle;
             default:
                 // If nothing else has returned by now, we must be idling...
                 if(gameSettings.debugMode) console.log("Player idling");
@@ -97,8 +101,9 @@ function determineAnimationState() {
         }
     }
 }
-
-// Logic code run every frame to detect changes to the player animation state
+/**
+ * @description Logic code run every frame to detect changes to the player animation state
+ */
 export function handleAnimations() {
     if(player.curAnimation !== player.lastAnimation) {
         const newState = determineAnimationState();
@@ -106,8 +111,9 @@ export function handleAnimations() {
         playAnimation(newState);
     }
 }
-
-// Animation playing handler (allows looping, start, and stop time specification per animation)
+/**
+ * @description Animation playing handler (allows looping, start, and stop time specification per animation)
+ */
 function playAnimation(animName, loop = true, startFrame = 0, endFrame = undefined) {
     if(!animName[1]){ // Single animation being played
         const animGroup = scene.getAnimationGroupByName(animName[0]);

@@ -26,9 +26,9 @@ export function resumeScene() {
  * @description Raycasting helper function, specify a `mesh`, `rayDirection`, and `rayLength`, while optionally specifying more `excludedMeshes` to ignore during raycast.
  * @param {BABYLON.Mesh} mesh Which mesh to raycast from (mesh's origin is used for ray origin)
  * @param {BABYLON.Vector3} rayDirection Which direction to raycast from
- * @param {float} rayLength How far (in scene units) to cast ray
+ * @param {number} rayLength How far (in scene units) to cast ray
  * @param {array} excludedMeshes (Optional) Extra mesh objects to exclude from raycast
- * @returns {boolean}
+ * @returns {boolean} Returns true if `ray.hit` detects a mesh not present in it's `excludedMeshes` (Ray casting done using `scene.pickWithRay()`)
  * @see https://doc.babylonjs.com/typedoc/functions/BABYLON.PickWithRay Babylon API documentation.
  */
 export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = []){
@@ -37,8 +37,8 @@ export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = []){
 		rayDirection,
 		rayLength
 	);
-	// Excluded meshes from all rayCast() checks (including/mostly onGround check)
-	excludedMeshes.push(player.body, scene.getMeshByName("playerMesh"));
+	// Exclude player meshes from rayCast() if the `mesh` is the player's mesh
+	if(mesh === player.body || mesh === scene.getMeshByName("playerMesh")) excludedMeshes.push(player.body, scene.getMeshByName("playerMesh"));
 	const predicate = (mesh) => !excludedMeshes.includes(mesh);
 	const raycast = scene.pickWithRay(ray, predicate);
 	return raycast.hit; // Return final hit result of ray
@@ -83,9 +83,9 @@ export function createMat(mesh, diffuseCol, specularCol = undefined, emissiveCol
 	mesh.material = myMaterial;
 }
 
-//===================//
-// ANIMATION HELPERS //
-//===================//
+//============//
+// UI HELPERS //
+//============//
 /* soon...? */
 
 //==============//
@@ -115,7 +115,7 @@ export function teleportPlayer(pos, keepVelocity) {teleportMesh(player.body, pos
 /**
  * @description Generates `amount` number of platforms, and gives them the specified `mass`.
  * @param {number} amount - Desired `BABYLON.Vector3` position to teleport mesh to
- * @param {number} mass - `Boolean` to determine if mesh should keep movement/rotation after teleportation
+ * @param {number} mass - Desired mass for platforms (set to non-zero value to enable physics)
  */
 export function generateRandomPlatforms(amount, mass){
 	// Generate random platforms for testing player movement
@@ -131,6 +131,20 @@ export function generateRandomPlatforms(amount, mass){
 		curObst.position = new BABYLON.Vector3(curObx - (objPosRange[0]/2), curOby, curObz - (objPosRange[2]/2));
 		createMat(curObst, curObstCol);
 	}
+}
+/**
+ * @description Generates a box with desired `dimensions`, `color`, and arbitrarily chosen `name`
+ * @param {string} name `String` Desired ground mesh name (must be unique to avoid scene mesh conflicts)
+ * @param {BABYLON.Vector3} dimensions `Vector3` Desired ground dimensions
+ * @param {string} color `String` hex code (in `"#abc123"` format)
+ * @todo Update this function to be more generic (add `position` variable to initialize box position, check if mesh name already exists, etc)
+ */
+export function generateBox(name, dimensions, color){
+	let groundMesh = BABYLON.MeshBuilder.CreateBox(name, {width: dimensions.x, height: dimensions.y, depth: dimensions.z}, scene);
+	let groundMat = new BABYLON.StandardMaterial(name+"_material", scene);
+	groundMat.diffuseColor = BABYLON.Color3.FromHexString(color);
+	groundMesh.material = groundMat;groundMesh.checkCollisions = true;
+	groundMesh.physicsImpostor = new BABYLON.PhysicsImpostor(groundMesh, BABYLON.PhysicsImpostor.BoxImpostor, {mass: 0, friction: 0.5, restitution: 0}, scene);
 }
 
 //===============//

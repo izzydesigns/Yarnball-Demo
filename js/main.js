@@ -2,13 +2,22 @@ import * as utils from "./utils.js";
 import * as inputs from "./input.js";
 import * as movement from "./movement.js";
 import * as animation from "./animation.js";
+import {generateBox} from "./utils.js";
 
 export const canvas = /** @type {HTMLCanvasElement} */ document.getElementById("renderCanvas"); // Get canvas element
 export const engine = new BABYLON.Engine(canvas, true, {
 	deterministicLockstep: true,lockstepMaxSteps: 4,
-	/* For testing shaders, enable: preserveDrawingBuffer: true,stencil: true,disableWebGL2Support: false*/
-});// Init 3D engine
+	/* For testing shaders, enable: preserveDrawingBuffer: true,stencil: true,disableWebGL2Support: false*/});// Init 3D engine
 export const scene = new BABYLON.Scene(engine);// This creates a basic Babylon Scene object (non-mesh)
+
+export let game = {
+	time: 0,
+	lastFrameTime: 0,
+	frameRateLimit: (1000 / 60),
+	colliders: [],
+	shadowGenerator: [],// TODO: Use this for each light source's `shadowGenerator`
+	animations: [],
+};
 export const gameSettings = {
 	defaultMoveSpeed: 1,
 	defaultMoveAccelerate: 0.05,
@@ -17,6 +26,7 @@ export const gameSettings = {
 	defaultMaxVelocity: 10,
 	defaultFriction: 0.15, //1 being zero friction, 0 being instant friction
 	defaultIdleAnimation: ["cat_idleStandA"],
+	defaultAnimBlendValue: 0.1, // Set to zero in order to disable animation blending & weights
 	defaultCameraDistance: 3,
 	defaultPlayerMass: 2,
 	defaultRotationSpeed: 0.025,
@@ -28,14 +38,6 @@ export const gameSettings = {
 	},
 	debugMode: false,
 }
-export let game = {
-	time: 0,
-	lastFrameTime: 0,
-	frameRateLimit: (1000 / 60),
-	colliders: [],
-	shadowGenerator: [],// TODO: Use this for each light source's `shadowGenerator`
-	animations: [],
-};
 export let player = {
 	mesh: null, //initialized below
 	body: null, //initialized below
@@ -72,7 +74,10 @@ export let player = {
 	),
 };
 
-// TODO: Possibly move createScene function code into utils.js or further segment code into chunks
+/**
+ * @desc Updates the `player.mesh` rotation & position based on `player.body` rotation/position values
+ * @todo Possibly move createScene function code into utils.js or a new `sceneHandler.js` file
+ */
 const createScene = async () => {
 	// PHYSICS AND GRAVITY
 	/* See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep */
@@ -104,15 +109,8 @@ const createScene = async () => {
 	game.shadowGenerator.blurBoxOffset = 1;//default 1, -1 to 1 */
 
 	// LOAD WORLD MESHES & PHYSICSIMPOSTORS
-
-	// Create ground object
-	let groundMesh = BABYLON.MeshBuilder.CreateBox("ground", {width: 50, height: 5, depth: 50}, scene);
-	let groundMat = new BABYLON.StandardMaterial("myMaterial", scene);
-	groundMat.diffuseColor = BABYLON.Color3.FromHexString("#44aa33");
-	groundMesh.position.y = 0;
-	groundMesh.material = groundMat;
-	groundMesh.checkCollisions = true; // Enable collision detection
-	groundMesh.physicsImpostor = new BABYLON.PhysicsImpostor(groundMesh, BABYLON.PhysicsImpostor.BoxImpostor, {mass: 0, friction: 0.5, restitution: 0}, scene);
+	// Create default ground object
+	utils.generateBox("ground", new BABYLON.Vector3(50,5,50), "#44aa33");
 
 	// Spawn 100 random platforms with zero mass (static props)
 	utils.generateRandomPlatforms(100, 0);// Set mass above zero to enable physics
@@ -135,21 +133,19 @@ const createScene = async () => {
 		{ mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0 },      // Adjust mass and physics properties
 		scene
 	);
-	player.body.isVisible = gameSettings.debugMode;
-
-	// Store all initialized physics colliders/impostors inside game object (update this as more are added to the scene)
-	// TODO: If adding more physicsImpostors outside of this `createScene` function, update the game.colliders to contain all new `physicsImpostor`s
-	game.colliders = scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor);
+	player.body.isVisible = gameSettings.debugMode; // Initialize player.body visibility based on initial `debugMode` status
 
 	// REGISTER INPUT, WINDOW, & ANIMATION HANDLERS
 	animation.initAnimations();
 	inputs.initWindowFunctions();
-	inputs.initEventListeners();
-
+	inputs.initKeyboardListeners();
+	
 	return scene;
 };
 
-// Run scene functions AFTER createScene() is finished
+/**
+ * @desc Runs the scene functions AFTER `createScene()` is finished
+ */
 createScene().then((scene) => {
 	// BEFORE scene renders frame (maxes out at monitor refresh rate)
 	scene.onBeforeRenderObservable.add(() => {
@@ -178,6 +174,6 @@ createScene().then((scene) => {
 
 	// player body ON PHYSICS COLLIDE with other physicsImpostors
 	player.body.physicsImpostor.registerOnPhysicsCollide(scene.meshes.filter(mesh => mesh.physicsImpostor).map(mesh => mesh.physicsImpostor), (collider, collidedAgainst) => {
-
+		// TODO: Fix this function by adding player mesh to ignored meshes (See `utils.rayCast` for more info)
 	});
 });

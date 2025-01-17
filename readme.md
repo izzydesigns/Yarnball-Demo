@@ -1,11 +1,9 @@
 Yarn ball! - _"A curious browser game about curious cats"_
 ===
----
 
 _Note: This game utilizes Babylon.js and works best when `WebGPU` is enabled. For best performance, use a `WebGPU` compatable browser. Performance is highly dependent on your device and the browser used. Feel free to experiment with various browsers, or adjust your `quality` settings ingame to improve game performance._
 
-**Device Support**
-===
+Device Support
 ---
 
 _**NOTE**: PC Specs are less important than using a browser with `WebGPU` enabled. This feature allows the browser to directly utilize the GPU for faster visual rendering and will yield overall higher FPS._
@@ -63,7 +61,6 @@ _**NOTE**: Keep in mind, mobile browser performance tests were conducted on a `S
   - **FPS Range**: ❔
 
 Game Design Document
-===
 ---
 
 ### 1. Core Concept

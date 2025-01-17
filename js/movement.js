@@ -1,8 +1,11 @@
 import {gameSettings, player, scene} from "./main.js";
 import * as utils from "./utils.js";
 
-let desiredMovement = BABYLON.Vector3.Zero();
-let moveDelayDelta = 0;
+let desiredMovement = BABYLON.Vector3.Zero(), moveDelayDelta = 0;
+/**
+ * @desc Handles the player movement and applies forces to the `player.body` based on desired direction.
+ * @desc Determines which direction and how strong the force is based on factors like `gameSettings.maxDefaultMoveSpeed
+ */
 export function handleMovement () {
     const cameraRotation = -player.camera.alpha;
     const forward = new BABYLON.Vector3(Math.sin(cameraRotation), 0, Math.cos(cameraRotation)).normalize();
@@ -59,7 +62,7 @@ export function handleMovement () {
     // Simulated friction (necessary for smooth player movement otherwise)
     if(!player.movement.isMoving && player.movement.onGround){
             if(player.speed > 0){
-                if (gameSettings.debugMode)utils.debugInfo.push(["Simulating friction!", player.speed]);
+                if (gameSettings.debugMode)console.log("Simulating friction!", player.speed);
                 let curVelo = player.body.physicsImpostor.getLinearVelocity();
                 let oldYVelo = curVelo.y;
                 let slowerVelo = new BABYLON.Vector3(curVelo.x, oldYVelo, curVelo.z);
@@ -76,24 +79,28 @@ export function handleMovement () {
     player.speed = Math.round(player.body.physicsImpostor.getLinearVelocity().length() * 100)/100;
     player.movementDirection = desiredMovement;
 }
-
+/**
+ * @desc Handles the `player.body` rotation and locks `player.body` rotation to 45 degree increments.
+ * @see {syncMeshAndBody} - Handles/syncs `player.mesh` rotation & position values
+ * @todo Use current `camera` angle to quantize values instead, some time in the future
+ */
 export function handleRotation() {
     const normalizedDirection = player.movementDirection.normalize();
     // Calculate desired angle from desiredMovement, then quantize to nearest 45 degrees
     let angle = Math.atan2(normalizedDirection.x, normalizedDirection.z);
     const quantizedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-    // Create desired Y rotation quaternion based on quantized angle
+    // Limits rotation to Y-axis rotation quaternion (based on new quantized angle)
     const desiredRotation = BABYLON.Quaternion.FromEulerAngles(0, quantizedAngle, 0);
-    // Enforce world-aligned rotation explicitly
     player.body.rotationQuaternion.normalize();
     player.body.rotationQuaternion = desiredRotation;
 
     // Lock physics body rotation on X and Z axes
-    // TODO: Allow minor rotation for occasion when player is on slanted surface, but limit angle
-    player.body.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, player.body.physicsImpostor.getAngularVelocity().y, 0));
     player.body.physicsImpostor.angularDamping = 0;// Zero damping for instant angularVelocity value
+    player.body.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, player.body.physicsImpostor.getAngularVelocity().y, 0));
 }
-
+/**
+ * @desc Updates the `player.mesh` rotation & position based on `player.body` rotation/position values
+ */
 export function syncMeshAndBody() {
     // Set player.mesh.skeleton pos to player.mesh pos (prevents mesh position desync during animations)
     player.mesh.skeleton.bones[0].getTransformNode().setAbsolutePosition(player.mesh.position);

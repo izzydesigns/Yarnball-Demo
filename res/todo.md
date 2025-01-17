@@ -1,9 +1,6 @@
 TODO LIST:
 ===
----
 
-- Enable shadows from all valid light sources in the scene
-	- [ ]  Debug issues with shadowGenerator seemingly not working (entire scene is pitch black without the HemisphericLight on)
 - Enable shadows from all valid light sources in the scene
 	- [ ]  Debug issues with shadowGenerator seemingly not working (entire scene is pitch black without the HemisphericLight on)
 - Implement basic modular UI screen overlay system
@@ -24,13 +21,13 @@ TODO LIST:
 	- [ ]  Add sneaking (alter player's hitbox height, check if player can uncrouch safely or not also)
 	- [ ]  Possibly change jump to hold space = generate line previewing trajectory, and let go to jump?
 	- [ ]  Disable player.movement.canMove when turn animations are happening
-    - [ ] Re-add movement delay (currently none) that is length of turn animation
-    - [ ] Re-enable player movement upon animation completion (don't loop anim either)
-    - [ ] Fix jump ready bug: have 0 speed -> tap spacebar -> wait -> move = jumping ???
+    - [ ]  Re-add movement delay (currently none) that is length of turn animation
+    - [ ]  Re-enable player movement upon animation completion (don't loop anim either)
+    - [ ]  Fix player.body physicsImpostor bugginess when colliding with objects at an angle
+    - [x]  Fix jump ready bug: have 0 speed -> tap spacebar -> wait -> move = jumping ???
 
 COMPLETED:
 ===
----
 
 - Create robust animation system **(COMPLETED ON 1/17/25)**
 	- [x]  Handle simple animation states (like walking, idling, sprinting, jumping, etc)
@@ -50,7 +47,6 @@ COMPLETED:
 
 NOTES/MISC RESOURCES:
 ===
----
 
 *"Hey you, yea you, you're doing a great job! Keep up the great work ^_^" - Izzy*
 
