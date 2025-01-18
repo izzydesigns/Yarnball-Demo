@@ -1,5 +1,4 @@
-import {engine, game, player, scene} from "./main.js";
-import * as input from "./input.js";
+import {engine, gameSettings, player, scene} from "./main.js";
 
 //===================================//
 // SCENE HELPERS/SHORTHAND VARIABLES //
@@ -11,7 +10,7 @@ import * as input from "./input.js";
 export function pauseScene() {
 	engine.stopRenderLoop(); // Pause game's render loop
 	scene.animationsEnabled = false; // Temporarily disables animations
-	console.log("Window/tab has been minimized, scene should pause...");
+	if(gameSettings.debugMode) console.log("Window/tab has been minimized, scene should pause...");
 }
 /**
  * @description Resumes the game using `engine.runRenderLoop(() => scene.render());`, and sets `scene.animationsEnabled` to `true` to resume animations.
@@ -20,7 +19,7 @@ export function pauseScene() {
 export function resumeScene() {
 	engine.runRenderLoop(() => scene.render()); // Resume rendering
 	scene.animationsEnabled = true; // Resumes scene animations
-	console.log("Window/tab is visible again! Resume the scene.");
+	if(gameSettings.debugMode) console.log("Window/tab is visible again! Resume the scene.");
 }
 /**
  * @description Raycasting helper function, specify a `mesh`, `rayDirection`, and `rayLength`, while optionally specifying more `excludedMeshes` to ignore during raycast.
@@ -186,14 +185,6 @@ export function showAxisHelper(size = 1) {
 		new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3(0, 0.05 * size, size * 0.95)
 	], new BABYLON.Color3(0, 0, 1), "Z", new BABYLON.Vector3(0, 0.05 * size, 0.9 * size), "blue");
 }
-
-// Public game variables for UI stat usage later on...
-export let gameObj = game;
-export let playerObj = player;
-export let sceneObj = scene;
-export let engineObj = engine;
-export let inputObj = input;
-
 /**
  * This is just an example of JSDoc parameter usage (w/ example function) for my own personal uses ^_^
  *

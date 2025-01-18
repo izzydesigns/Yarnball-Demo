@@ -1,4 +1,4 @@
-import {gameSettings, player, scene} from "./main.js";
+import {gameSettings, player} from "./main.js";
 import * as utils from "./utils.js";
 
 let desiredMovement = BABYLON.Vector3.Zero(), moveDelayDelta = 0;
@@ -13,9 +13,9 @@ export function handleMovement () {
     let lerpedVelo = BABYLON.Vector3.Zero(), currentVelocity = player.body.physicsImpostor.getLinearVelocity();
 
     // Check & sets canMove, canJump and onGround = true if rayCast below player = true (is colliding below)
-    let onGroundCheck = utils.rayCast(player.body, BABYLON.Vector3.Down(), 0.2 + 0.02/* Half player height (+ buffer for slopes) */);
-    player.movement.canMove = player.movement.canJump = player.movement.onGround = onGroundCheck;
-    player.lastMoveSpeed = player.curMoveSpeed; // Update player.lastMoveSpeed before curMoveSpeed gets updated
+    let onGroundCheck = utils.rayCast(player.body, BABYLON.Vector3.Down(), 0.2 + 0.05/* Half player height (+ buffer for slopes) */);
+    player.movement.canJump = player.movement.onGround = onGroundCheck;
+    player.prevMovementSpeed = player.speed; // Update player.prevMovementSpeed before curMovementSpeed gets updated
 
     // Calculate desiredMovement, quantize to 45deg increments, & apply final force to player.body
     if(player.movement.canMove && player.movement.isMoving) {
@@ -32,15 +32,15 @@ export function handleMovement () {
             player.movement.jumping = false;
         }
 
-        // Caps horizontal movement to the player.curMoveSpeed value (preserving y-axis forces)
+        // Caps horizontal movement to the player.curMovementSpeed value (preserving y-axis forces)
         if (!desiredMovement.equals(BABYLON.Vector3.Zero())) {
-            let oldUp = desiredMovement.normalize().scaleInPlace(player.jumpHeight + (player.curMoveSpeed * 0.5)).y;
-            desiredMovement.normalize().scaleInPlace(player.curMoveSpeed);
+            let oldUp = desiredMovement.normalize().scaleInPlace(gameSettings.defaultMinJumpHeight + player.jumpHeight + player.curMovementSpeed).y;
+            desiredMovement.normalize().scaleInPlace(player.curMovementSpeed);
             desiredMovement.y = (addJumpForce) ? oldUp : currentVelocity.y;// Restore y-axis if jumping
         }
 
         // Gradual force scaling (and delay) before force gets applied to player
-        moveDelayDelta = Math.round(moveDelayDelta * 100) / 100; // Remove floating point precision errors
+        moveDelayDelta = Number(moveDelayDelta.toFixed(3)); // Remove floating point precision errors
         let velocityDeltaScaled = new BABYLON.Vector3(desiredMovement.scale(moveDelayDelta).x, desiredMovement.y, desiredMovement.scale(moveDelayDelta).z);
         lerpedVelo = (moveDelayDelta > 0 ? velocityDeltaScaled : currentVelocity);
         if(moveDelayDelta < 1)moveDelayDelta += gameSettings.defaultMoveAccelerate;
@@ -49,35 +49,37 @@ export function handleMovement () {
         const angle = Math.atan2(lerpedVelo.x, lerpedVelo.z);
         const quantizedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
         const magnitude = lerpedVelo.length();
-        lerpedVelo = new BABYLON.Vector3(
+        let finalVelo = new BABYLON.Vector3(
             Math.sin(quantizedAngle) * magnitude,
             lerpedVelo.y, // Preserve Y component for vertical movement
             Math.cos(quantizedAngle) * magnitude
         );
 
         // Apply final movement force to player.body.physicsImpostor
-        player.body.physicsImpostor.setLinearVelocity(lerpedVelo);
+        player.body.physicsImpostor.setLinearVelocity(finalVelo);
     }
 
     // Simulated friction (necessary for smooth player movement otherwise)
     if(!player.movement.isMoving && player.movement.onGround){
-            if(player.speed > 0){
-                if (gameSettings.debugMode)console.log("Simulating friction!", player.speed);
-                let curVelo = player.body.physicsImpostor.getLinearVelocity();
-                let oldYVelo = curVelo.y;
-                let slowerVelo = new BABYLON.Vector3(curVelo.x, oldYVelo, curVelo.z);
-                player.body.physicsImpostor.setLinearVelocity(slowerVelo.scale(1 - gameSettings.defaultFriction)); // Subtract 10% from player speed per frame
-            }
-            if(moveDelayDelta > 0)moveDelayDelta = 0; // Reduce value by `gameSettings.defaultMoveAccelerate` to re-enable gradual deceleration
+        if(player.speed > 0){
+            if(gameSettings.debugMode) console.log("Simulating friction!", player.speed);
+            let curVelo = player.body.physicsImpostor.getLinearVelocity();
+            let oldYVelo = curVelo.y;
+            let slowerVelo = new BABYLON.Vector3(curVelo.x, oldYVelo, curVelo.z).scale(1 - gameSettings.defaultFriction);
+            player.body.physicsImpostor.setLinearVelocity(slowerVelo);
+        }
+        if(moveDelayDelta > 0)moveDelayDelta = 0; // Reduce value by `gameSettings.defaultMoveAccelerate` to re-enable gradual deceleration
     }
 
     // Handle sprinting
-    if (player.movement.sprinting && player.curMoveSpeed <= player.sprintSpeed) {player.curMoveSpeed += gameSettings.defaultMoveAccelerate;}
-    if (!player.movement.sprinting && player.curMoveSpeed > gameSettings.defaultMoveSpeed) {player.curMoveSpeed -= gameSettings.defaultMoveAccelerate;}
+    if (player.movement.sprinting && player.curMovementSpeed <= player.sprintSpeed) {player.curMovementSpeed += gameSettings.defaultMoveAccelerate;}
+    if (!player.movement.sprinting && player.curMovementSpeed > gameSettings.defaultMoveSpeed) {player.curMovementSpeed -= gameSettings.defaultMoveAccelerate;}
+    player.curMovementSpeed = Number(player.curMovementSpeed.toFixed(3)); // Fix rounding errors
 
     // Update player speed and movementDirection values with final calculated values
-    player.speed = Math.round(player.body.physicsImpostor.getLinearVelocity().length() * 100)/100;
+
     player.movementDirection = desiredMovement;
+    player.speed = Number(player.body.physicsImpostor.getLinearVelocity().scale(0.99).length().toFixed(2));
 }
 /**
  * @desc Handles the `player.body` rotation and locks `player.body` rotation to 45 degree increments.

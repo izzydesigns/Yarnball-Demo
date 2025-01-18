@@ -1,0 +1,165 @@
+// Required Bootstrap imports
+@import "../node_modules/bootstrap/scss/bootstrap";
+@import "../node_modules/bootstrap/scss/variables";
+@import "../node_modules/bootstrap/scss/variables-dark";
+@import "../node_modules/bootstrap/scss/maps";
+@import "../node_modules/bootstrap/scss/mixins";
+@import "../node_modules/bootstrap/scss/root";
+/*@import "../node_modules/bootstrap/scss/functions";
+@import "../node_modules/bootstrap/scss/reboot";
+@import "../node_modules/bootstrap/scss/type";
+@import "../node_modules/bootstrap/scss/images";
+@import "../node_modules/bootstrap/scss/containers";
+@import "../node_modules/bootstrap/scss/grid";*/
+// Import custom fonts (google fonts)
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
+// Define mix-ins
+@mixin color-scheme($name) {@media (prefers-color-scheme: #{$name}) {@content;}}
+
+// Define custom global classes & overrides
+$enable-shadows: true;
+$color-mode-type: data;//media-query;
+$font-family-base: "Open Sans", "Roboto", sans-serif;
+.clickThrough{
+  pointer-events: none; /* Makes the div ignore mouse events */
+  user-select: none; /* Prevents text selection */
+}
+.hide,.hidden{display: none !important;}
+.fullscreen{
+  position: fixed;
+  left: 0;top: 0;
+  width: 100%;height: 100%;
+  margin: 0;padding: 0;
+}
+.btn{
+  font-size: large;
+  border-color: $secondary;
+  background: $body-tertiary-color;
+  border-width: 0.1rem;
+  &:hover{
+    border-color: $primary;
+    background: rgba(0,0,0,.75);
+  }
+}
+
+// Babylon.js game screen/canvas element
+#renderCanvas{
+  position: fixed;
+  left: 0;top: 0;
+  width: 100%;height: 100%;
+  margin: 0;padding: 0;
+  touch-action: none;
+  z-index: 0;
+}
+// Debug layer z-index fix:
+#scene-explorer-host, #inspector-host {z-index: 2;}
+
+html, body{
+  position: relative;
+  width: 100%;height: 100%;
+  overflow: hidden;
+  font-size: larger;
+  background: #333;
+  text-align: center;
+  text-shadow: 0.1rem 0.1rem 0.05rem rgba(0,0,0,0.5);
+}
+
+// Menu css sizing/positioning, tweaks, etc
+// TODO: Mostly stick with Bootstrap, don't re-invent the wheel so to speak...
+#menus{
+  z-index: 1;
+  background: transparent;
+  /* ALL menus */
+  > * {
+    position: absolute;
+    display: none; // TODO: Set display status for each screen in screen.js
+    pointer-events: all; /* Re-enables pointer events for all menus */
+  }
+
+  /* Main menu */
+  .mainMenu{
+    background-color: #333;
+    font-size: x-large;
+    z-index: 100;
+    > *{
+      position: absolute;
+      width: 50%;
+      top: 50%;left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .btn {
+      min-width: 16rem !important;
+      &:not(:last-child) {
+        margin-bottom: 1rem !important;
+      }
+    }
+  }
+
+  /* Settings menu */
+  .settingsMenu{
+    background: rgba(0,0,0,.75);
+    font-size: 1.25rem;
+    .btn{
+      font-size: medium;
+      vertical-align: text-top;
+    }
+  }
+
+  /* Ingame menu (includes HUD & Pause submenus) */
+  .ingameHUDMenu{
+    background: rgba(0,0,0,.25);
+    position: absolute;
+    width: 100%;
+    height: auto;
+    bottom: 0;
+    font-size: large;
+  }
+
+  /* Pause menu */
+  .pauseMenu{
+    top: 50%;left: 50%;
+    width: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,.5);
+    border-radius: 1rem;
+    border: 0.1rem solid rgba(0,0,0,.5);
+    .btn {
+      min-width: 10rem !important;
+      font-size: large;
+      font-weight: bold;
+      &:not(:last-child) {
+        margin-bottom: 1rem !important;
+      }
+    }
+  }
+}
+
+
+
+/* Example of dark/light color scheme usage
+@include color-scheme(light) {
+  color: black !important;
+  background: rgba(255, 255, 255, .1) !important;
+}
+@include color-scheme(dark) {
+  color: white !important;
+  background: rgba(0, 0, 0, .1) !important;
+}*/
+
+/*
+// Required Bootstrap imports
+@import "../node_modules/bootstrap/scss/variables";
+@import "../node_modules/bootstrap/scss/variables-dark";
+@import "../node_modules/bootstrap/scss/maps";
+@import "../node_modules/bootstrap/scss/mixins";
+@import "../node_modules/bootstrap/scss/root";
+
+// Optional components
+@import "../node_modules/bootstrap/scss/utilities";
+@import "../node_modules/bootstrap/scss/reboot";
+@import "../node_modules/bootstrap/scss/containers";
+@import "../node_modules/bootstrap/scss/grid";
+@import "../node_modules/bootstrap/scss/helpers";
+@import "../node_modules/bootstrap/scss/utilities/api";
+*/

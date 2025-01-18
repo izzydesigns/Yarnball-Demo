@@ -1,6 +1,22 @@
 TODO LIST:
 ===
 
+- Further improve movement mechanics
+	- [ ]  Fix player being on slopes (player rotation locked to Y axis, fix that by just quantizing the X and Y silly!)
+	- [ ]  Fix jump bug (hold space, tap a direction and immediately let go, the player keeps moving???)
+	- [ ]  Add walking (bind to left control by default)
+	- [ ]  Add sneaking (alter player's hitbox height, check if player can uncrouch safely or not also)
+	- [ ]  Re-add movement delay (currently none) that is length of turn animation (add turn animations first)
+	- [ ]  Hold space = generate line previewing trajectory
+	- [ ]  Tweak overall default settings until things "feel" right ingame. (Make a real test level finally?)
+	- [ ]  Fix player being an (unstoppable force) so to speak, when colliding with other objects (see main.js - 190)
+    - [x]  Add jumping in-place (currently ties horizontal velo magnitude to Y axis, so it should be an easy fix)
+	- [x]  Fix player.body physicsImpostor bugginess when colliding with objects at an angle
+	- [x]  Fix jump ready bug: have 0 speed -> tap spacebar -> wait -> move = jumping ???
+- Further improve animation system
+	- [ ]  Add turn animations & set player.movement.canMove = false when turning
+	- [ ]  Refine falling animation by playing first half of jump animation while moving up, second half while moving down (animation.js - 136)
+	- [ ]  Refine jumping animation (or add visual indicators) prevent jumpReady anim while moving
 - Enable shadows from all valid light sources in the scene
 	- [ ]  Debug issues with shadowGenerator seemingly not working (entire scene is pitch black without the HemisphericLight on)
 - Implement basic modular UI screen overlay system
@@ -16,15 +32,6 @@ TODO LIST:
 	- [ ]  Add some kind of footstep sound
 	- [ ]  Add sound when player jumps
 	- [ ]  Add sound when player collides with object? (maybe a little meow)
-- Further improve movement system
-	- [ ]  Add jumping in-place (currently ties horizontal velo magnitude to Y axis, so it should be an easy fix)
-	- [ ]  Add sneaking (alter player's hitbox height, check if player can uncrouch safely or not also)
-	- [ ]  Possibly change jump to hold space = generate line previewing trajectory, and let go to jump?
-	- [ ]  Disable player.movement.canMove when turn animations are happening
-    - [ ]  Re-add movement delay (currently none) that is length of turn animation
-    - [ ]  Re-enable player movement upon animation completion (don't loop anim either)
-    - [ ]  Fix player.body physicsImpostor bugginess when colliding with objects at an angle
-    - [x]  Fix jump ready bug: have 0 speed -> tap spacebar -> wait -> move = jumping ???
 
 COMPLETED:
 ===

@@ -1,9 +1,11 @@
 {
   "dependencies": {
-    "babylonjs": "^7.40.4"
+    "babylonjs": "^7.40.4",
+    "bootstrap": "^5.3.3"
   },
   "devDependencies": {
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "sass": "^1.83.4"
   },
   "scripts": {
     "start": "http-server"
