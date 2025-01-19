@@ -1,6 +1,7 @@
 import {player, scene, engine, canvas, gameSettings, game} from "./main.js";
 import * as utils from "./utils.js";
 import * as animation from "./animation.js";
+import {animationData} from "./animation.js";
 
 export let isMobile, isTablet, isAndroid, isiPhone, isiPad;
 /**
@@ -23,9 +24,15 @@ export function initKeyboardListeners() {
         if (key.code === input.jump && !player.movement.readyJump) {player.movement.readyJump = true;}
         if (key.code === input.sprint) {player.movement.sprinting = true;}
         if (key.code === "NumpadAdd") {
-            // TODO: manual animation playing (the two below don't seem to work here)
-            //player.curAnimation = animation.animationData.idleStandClean;
-            //animation.playAnimation(player.curAnimation[0], true);
+            // Hard play specified animation (no player.curAnimation get/set)
+            const desiredAnim = animationData.idleSleep;
+            const sleepAnim = scene.getAnimationGroupByName(desiredAnim[0]);
+            if (!sleepAnim) return;
+            animation.stopAllAnimations();
+            sleepAnim.reset();
+            sleepAnim.start(true, 2);
+            sleepAnim.weight = 1;
+
         }
         if (key.code === "NumpadSubtract"){
             //player.curAnimation = animation.animationData.idleSleep;

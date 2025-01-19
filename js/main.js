@@ -27,9 +27,9 @@ export let game = {
 export const gameSettings = {
 	defaultMoveSpeed: 1,
 	defaultMoveAccelerate: 0.05, // How quickly player reaches max speed, 0.2 = 5 frames later
-	defaultSprintSpeed: 2,
+	defaultSprintSpeed: 3,
 	defaultJumpHeight: 3,
-	defaultMinJumpHeight: 0.25,
+	defaultMinJumpHeight: 0.5,
 	defaultMaxVelocity: 10,
 	defaultFriction: 0.5, //1 being instant friction, 0 being zero friction
 	defaultIdleAnimation: ["cat_idleStandA"],
@@ -38,8 +38,8 @@ export const gameSettings = {
 	defaultPlayerMass: 2,
 	defaultRotationSpeed: 0.025,
 	defaultSpawnPoint: new BABYLON.Vector3(0,8,0),
-	defaultGravity: new BABYLON.Vector3(0, -9.81, 0), // Set gravity
-	defaultMenu: "ingame",
+	defaultGravity: new BABYLON.Vector3(0, -9, 0), // Set gravity to value that `feels` right rather than real world values
+	defaultMenu: "main",
 	controls: {
 		forward: "KeyW",left: "KeyA",back: "KeyS",right: "KeyD",
 		jump: "Space",sprint: "ShiftLeft",
@@ -63,6 +63,7 @@ export let player = {
 		back: false,
 		left: false,
 		right: false,
+		isAfk: false,
 	},
 	curMovementSpeed: gameSettings.defaultMoveSpeed,
 	prevMovementSpeed: 0,
@@ -74,6 +75,7 @@ export let player = {
 	curAnimation: gameSettings.defaultIdleAnimation,
 	lastAnimation: null,
 	isAnimTransitioning: false,
+	lastMoveTime: 0,
 	camera: new BABYLON.ArcRotateCamera(
 		"camera",
 		Math.PI / 2, // Alpha (horizontal rotation)
@@ -127,7 +129,7 @@ const createScene = async () => {
 	utils.generateRandomPlatforms(50, 10);// Set mass above zero to enable physics
 
 	// Load player mesh into player.mesh & create physicsImpostor for player.body
-	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_full.glb", scene, undefined, undefined).then((result) => {
+	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_default.glb", scene, undefined, undefined).then((result) => {
 		player.mesh = result.meshes[0];// Initialize player.mesh with loaded mesh
 		player.mesh.scaling = new BABYLON.Vector3(2, 2, 2);
 		player.mesh.skeleton = scene.getSkeletonByName("Player");// Init & store skeleton object
@@ -143,6 +145,7 @@ const createScene = async () => {
 		{ mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0 },      // Adjust mass and physics properties
 		scene
 	);
+	player.body.physicsImpostor.angularDamping = 0;// Zero damping for instant turning
 	player.body.isVisible = gameSettings.debugMode; // Initialize player.body visibility based on initial `debugMode` status
 	player.body.position = gameSettings.defaultSpawnPoint;
 
@@ -167,9 +170,9 @@ createScene().then((scene) => {
 			game.lastFrameTime = game.time - (deltaTime % game.frameRateLimit);
 			// PUT CODE HERE TO BE EXECUTED @ 60FPS
 			movement.handleMovement();
+			animation.handleAnimations();
 			screen.updateMenus();
 		}
-		animation.handleAnimations();
 		movement.handleRotation();
 		movement.syncMeshAndBody();
 	});

@@ -37,9 +37,12 @@ $font-family-base: "Open Sans", "Roboto", sans-serif;
   border-color: $secondary;
   background: $body-tertiary-color;
   border-width: 0.1rem;
-  &:hover{
+  font-weight: normal;
+  transition: font-weight 0.1s linear;
+  &:hover, &:active{
     border-color: $primary;
     background: rgba(0,0,0,.75);
+    font-weight: bolder;
   }
 }
 
@@ -79,7 +82,7 @@ html, body{
 
   /* Main menu */
   .mainMenu{
-    background-color: #333;
+    background: linear-gradient(110deg, #1a2857, #1c0529);
     font-size: x-large;
     z-index: 100;
     > *{
@@ -100,9 +103,15 @@ html, body{
   .settingsMenu{
     background: rgba(0,0,0,.75);
     font-size: 1.25rem;
+    input{
+      padding: 0.25rem 0.5rem;
+    }
     .btn{
       font-size: medium;
-      vertical-align: text-top;
+      vertical-align: top;
+      &:not(.debugToggle,.jumpApply){
+        margin-bottom: 0.5rem;
+      }
     }
   }
 

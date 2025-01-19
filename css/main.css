@@ -12052,10 +12052,13 @@ textarea.form-control-lg {
   border-color: #6c757d;
   background: rgba(33, 37, 41, 0.5);
   border-width: 0.1rem;
+  font-weight: normal;
+  transition: font-weight 0.1s linear;
 }
-.btn:hover {
+.btn:hover, .btn:active {
   border-color: #0d6efd;
   background: rgba(0, 0, 0, 0.75);
+  font-weight: bolder;
 }
 
 #renderCanvas {
@@ -12100,7 +12103,7 @@ html, body {
   pointer-events: all; /* Re-enables pointer events for all menus */
 }
 #menus .mainMenu {
-  background-color: #333;
+  background: linear-gradient(110deg, #1a2857, #1c0529);
   font-size: x-large;
   z-index: 100;
 }
@@ -12121,9 +12124,15 @@ html, body {
   background: rgba(0, 0, 0, 0.75);
   font-size: 1.25rem;
 }
+#menus .settingsMenu input {
+  padding: 0.25rem 0.5rem;
+}
 #menus .settingsMenu .btn {
   font-size: medium;
-  vertical-align: text-top;
+  vertical-align: top;
+}
+#menus .settingsMenu .btn:not(.debugToggle, .jumpApply) {
+  margin-bottom: 0.5rem;
 }
 #menus .ingameHUDMenu {
   background: rgba(0, 0, 0, 0.25);

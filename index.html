@@ -36,13 +36,14 @@
       <div class="w-50 align-middle d-inline-block">
         <h1>Yarn ball! 🧶</h1>
         <h4>🐈 A curious game about curious cats...</h4>
+        <h6 class="fst-italic">Who knows what's gonna happen next!</h6>
         <hr>
         <br>
-        <button class="play btn">▶️ Play Game</button>
+        <button class="play btn fs-3">▶️ Play Game</button>
         <br>
-        <button class="settings btn">⚙️ Settings Menu</button>
+        <button class="settings btn fs-3">⚙️ Settings Menu</button>
         <br>
-        <button class="exit btn">❌ Exit Game</button>
+        <button class="exit btn fs-3">❌ Exit Game</button>
       </div>
     </div>
     <div class="settingsMenu fullscreen">
@@ -50,27 +51,30 @@
       <h6><i>Adjust various game settings</i></h6>
       <hr>
       <div class="w-50 align-middle d-inline-block">
+        <h6 class="fst-italic">Save game progress <b>(Export to file recommended)</b>:</h6>
         <button class="save_local btn">💾 Save game data (local browser storage)</button>
+        <br>
         <button class="save_export btn">📤 Export game data (to save.txt file)</button>
+        <br>
         <button class="save_export btn">📥 Import game data (from save.txt file)</button>
-        <hr>
-        <label class="d-inline-block w-50 fw-bold">Debug mode: <span class="debugMode">❌</span></label>
-        <button class="debugToggle btn">Toggle Debug mode</button>
         <hr>
         <h6 class="fst-italic">Override player parameters <b>(Debug mode only)</b>:</h6>
         <label for="moveSpeed" class="d-inline-block w-50 fw-bold">Walk speed:</label>
         <input type="number" id="moveSpeed" class="form-control d-inline-block w-25" max="100" min="0">
-        <button id="moveSpeedApply" class="walkApply btn d-inline-block">Apply</button>
+        <button id="moveSpeedApply" class="walkApply btn d-inline-block fw-bold">Apply</button>
         <br>
         <label for="sprintSpeed" class="d-inline-block w-50 fw-bold">Sprint speed:</label>
         <input type="number" id="sprintSpeed" class="form-control d-inline-block w-25" max="100" min="0">
-        <button id="sprintSpeedApply" class="sprintApply btn d-inline-block">Apply</button>
+        <button id="sprintSpeedApply" class="sprintApply btn d-inline-block fw-bold">Apply</button>
         <br>
         <label for="jumpHeight" class="d-inline-block w-50 fw-bold">Jump Height:</label>
         <input type="number" id="jumpHeight" class="form-control d-inline-block w-25" max="100" min="0">
-        <button id="jumpHeightApply" class="jumpApply btn d-inline-block">Apply</button>
+        <button id="jumpHeightApply" class="jumpApply btn d-inline-block fw-bold">Apply</button>
         <hr>
-        <button class="back btn">Back to previous menu</button>
+        <label class="d-inline-block w-50">Debug mode: <span class="debugMode">❌</span></label>
+        <button class="debugToggle btn fw-bold">Toggle Debug mode</button>
+        <hr>
+        <button class="back btn fs-5">Back to previous menu</button>
       </div>
     </div>
     <div class="ingameHUDMenu clickThrough">
@@ -88,11 +92,11 @@
       <h1>🐾 Paused 🐾</h1>
       <hr>
       <div class="w-50 align-middle d-inline-block">
-        <button class="resume btn">Resume</button>
+        <button class="resume btn fs-5">Resume</button>
         <br>
-        <button class="settings btn">Settings</button>
+        <button class="settings btn fs-5">Settings</button>
         <br>
-        <button class="mainmenu btn">Main Menu</button>
+        <button class="mainmenu btn fs-5">Main Menu</button>
       </div>
       <br>
       <br>

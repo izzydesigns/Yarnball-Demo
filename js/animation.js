@@ -14,7 +14,7 @@ export const animationData = {
     idleLaying: ["cat_idleLayDown"],
     idleSit: ["cat_idleSitA"],
     idleSitClean: ["cat_idleSitClean"],
-    idleSleep: ["cat_idleSleep"],
+    idleSleep: ["cat_","cat_idleSleep"],
     idleStand: ["cat_idleStandA"],
     idleStandClean: ["cat_idleStandClean"],
     jump: ["cat_jump", "cat_idleStandA"],
@@ -62,10 +62,6 @@ export function initAnimations() {
  * @description Returns which player animation should be playing based on the player's data
  */
 function getAnimationState() {
-    if(player.curAnimation === animationData.idleSleep){
-        return animationData.idleSleep;
-    }
-
     // Handle jumping/falling animations
     if(!player.movement.onGround){
         if(player.movement.jumping){
@@ -111,6 +107,7 @@ export function handleAnimations() {
     if(player.curAnimation !== player.lastAnimation) {
         const newState = getAnimationState();
         if (!newState || newState === player.curAnimation) return;
+        player.lastAnimation = player.curAnimation;
         playAnimation(newState);
     }
 }
@@ -119,7 +116,6 @@ export function handleAnimations() {
  */
 export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = undefined) {
     if(Array.isArray(newAnim) && newAnim[0] !== player.curAnimation[0]) {
-        console.log("Animation is updating: ", player.curAnimation[0], " -> ", newAnim[0]);
         if (newAnim[1]) {
             // Retrieve newAnim[0] animation key from animationData object (if it exists)
             const animKey = Object.values(animationData).find(anim => anim[0] === newAnim[0]);
@@ -171,11 +167,12 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
 
             return;
         }
-        const animGroup = scene.getAnimationGroupByName(newAnim[0]);
-        if (animGroup) { // add && !player.isAnimTransitioning if you want single animations to finish before playing new animation
+        const desiredPlayAnim = scene.getAnimationGroupByName(newAnim[0]);
+        if (desiredPlayAnim) { // add && !player.isAnimTransitioning if you want single animations to finish before playing new animation
             // Stop all other animations on the mesh before proceeding
             stopAllAnimations();
-            animGroup.reset();animGroup.start(loop, 1.0, startFrame, endFrame ? endFrame : animGroup.to);animGroup.weight = 1;
+            // Reset, start, and weight=1 to getNewAnim
+            desiredPlayAnim.reset();desiredPlayAnim.start(loop, 1.0, startFrame, endFrame ? endFrame : desiredPlayAnim.to);desiredPlayAnim.weight = 1;
             player.lastAnimation = player.curAnimation;
             player.curAnimation = newAnim;
             return;

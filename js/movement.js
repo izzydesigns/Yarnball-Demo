@@ -1,4 +1,4 @@
-import {gameSettings, player} from "./main.js";
+import {game, gameSettings, player} from "./main.js";
 import * as utils from "./utils.js";
 
 let desiredMovement = BABYLON.Vector3.Zero(), moveDelayDelta = 0;
@@ -19,6 +19,9 @@ export function handleMovement () {
 
     // Calculate desiredMovement, quantize to 45deg increments, & apply final force to player.body
     if(player.movement.canMove && player.movement.isMoving) {
+        // Update lastMoveTime to game.time value
+        player.lastMoveTime = game.time;
+
         if (player.movement.right) desiredMovement.addInPlace(forward);
         if (player.movement.left) desiredMovement.addInPlace(forward.scale(-1));
         if (player.movement.back) desiredMovement.addInPlace(right.scale(-1));
@@ -34,9 +37,12 @@ export function handleMovement () {
 
         // Caps horizontal movement to the player.curMovementSpeed value (preserving y-axis forces)
         if (!desiredMovement.equals(BABYLON.Vector3.Zero())) {
-            let oldUp = desiredMovement.normalize().scaleInPlace(gameSettings.defaultMinJumpHeight + player.jumpHeight + player.curMovementSpeed).y;
+            // Set desired Y movement by saving previous desiredMovement value & scale it by the jumpForce
+            let jumpForce = player.jumpHeight + gameSettings.defaultMinJumpHeight + (player.speed);
+            let desiredJumpY = desiredMovement.normalize().scaleInPlace(jumpForce).y;
             desiredMovement.normalize().scaleInPlace(player.curMovementSpeed);
-            desiredMovement.y = (addJumpForce) ? oldUp : currentVelocity.y;// Restore y-axis if jumping
+            // If we are adding jump force this frame... use preserved Y value
+            desiredMovement.y = (addJumpForce) ? desiredJumpY : currentVelocity.y;// Restore y-axis if jumping
         }
 
         // Gradual force scaling (and delay) before force gets applied to player
@@ -60,8 +66,8 @@ export function handleMovement () {
     }
 
     // Simulated friction (necessary for smooth player movement otherwise)
-    if(!player.movement.isMoving && player.movement.onGround){
-        if(player.speed > 0){
+    if(!player.movement.isMoving){
+        if(player.speed > 0 && player.movement.onGround){
             if(gameSettings.debugMode) console.log("Simulating friction!", player.speed);
             let curVelo = player.body.physicsImpostor.getLinearVelocity();
             let oldYVelo = curVelo.y;
@@ -74,12 +80,11 @@ export function handleMovement () {
     // Handle sprinting
     if (player.movement.sprinting && player.curMovementSpeed <= player.sprintSpeed) {player.curMovementSpeed += gameSettings.defaultMoveAccelerate;}
     if (!player.movement.sprinting && player.curMovementSpeed > gameSettings.defaultMoveSpeed) {player.curMovementSpeed -= gameSettings.defaultMoveAccelerate;}
+
+    // Update player `curMovementSpeed`, `movementDirection`, and `speed` values with final calculated values
     player.curMovementSpeed = Number(player.curMovementSpeed.toFixed(3)); // Fix rounding errors
-
-    // Update player speed and movementDirection values with final calculated values
-
     player.movementDirection = desiredMovement;
-    player.speed = Number(player.body.physicsImpostor.getLinearVelocity().scale(0.99).length().toFixed(2));
+    player.speed = Number(player.body.physicsImpostor.getLinearVelocity().scale(0.99).length().toFixed(2)); // Fix rounding errors
 }
 /**
  * @desc Handles the `player.body` rotation and locks `player.body` rotation to 45 degree increments.
@@ -91,13 +96,15 @@ export function handleRotation() {
     // Calculate desired angle from desiredMovement, then quantize to nearest 45 degrees
     let angle = Math.atan2(normalizedDirection.x, normalizedDirection.z);
     const quantizedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-    // Limits rotation to Y-axis rotation quaternion (based on new quantized angle)
+
+    // Limits rotation to Y-axis rotation quaternion
+    // TODO: Properly limit X and Z rotation to 45 degrees rather than using zero
     const desiredRotation = BABYLON.Quaternion.FromEulerAngles(0, quantizedAngle, 0);
-    player.body.rotationQuaternion.normalize();
-    player.body.rotationQuaternion = desiredRotation;
+
+    // Apply `desiredRotation` to `player.body`
+    player.body.rotationQuaternion = desiredRotation.normalize();
 
     // Lock physics body rotation on X and Z axes
-    player.body.physicsImpostor.angularDamping = 0;// Zero damping for instant angularVelocity value
     player.body.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0, player.body.physicsImpostor.getAngularVelocity().y, 0));
 }
 /**
