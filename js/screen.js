@@ -24,11 +24,16 @@ const settings_backBtn = $("#menus .settingsMenu .back");
 // Get speed progress bar element
 const speedProgressBar = $("#menus .ingameHUDMenu .progress-bar");
 // Get HUD elements
-const speedValElem = $("#menus .ingameHUDMenu .speed_value");
-const fpsValElem = $("#menus .ingameHUDMenu .fps_value");
-const jumpValElem = $("#menus .ingameHUDMenu .jump_value");
-const inAirValElem = $("#menus .ingameHUDMenu .inAir_value");
-const sprintValElem = $("#menus .ingameHUDMenu .sprint_value");
+const hud1ValElem = $("#menus .ingameHUDMenu .value1");
+const hud2ValElem = $("#menus .ingameHUDMenu .value2");
+const hud3ValElem = $("#menus .ingameHUDMenu .value3");
+const hud4ValElem = $("#menus .ingameHUDMenu .value4");
+const hud5ValElem = $("#menus .ingameHUDMenu .value5");
+const hudXValElem = $("#menus .ingameHUDMenu .x_value");
+const hudYValElem = $("#menus .ingameHUDMenu .y_value");
+const hudZValElem = $("#menus .ingameHUDMenu .z_value");
+// Misc variables
+const lowFPS = [60, "red"], medFPS = [120, "yellow"], highFPS = [200, "green"];
 
 export let previousMenu = "";
 
@@ -60,15 +65,34 @@ export function updateMenus () {
 // Handle dynamically updating values for UI elements (like the settings menu, ingame HUD data, etc)
 function updateScreenElements () {
     if(game.curMenu === "ingame"){
-        //Update the ingame HUD elements
-        speedValElem.text(player.speed.toFixed(1)+" (Raw: "+player.speed+")");
-        jumpValElem.text(player.movement.readyJump?"✔️":"✖️");
-        inAirValElem.text(!player.movement.onGround?"✔️":"✖️");
-        sprintValElem.text(player.movement.sprinting?"✔️":"✖️");
         let absoluteFPS = engine.getFps();
         game.currentFPS = absoluteFPS;
-        fpsValElem.text(absoluteFPS.toFixed(0));
-        speedProgressBar.width((player.speed / gameSettings.defaultSprintSpeed) * 100+"%");
+        let curPos = player.body.position;
+        //Update the ingame HUD elements
+        hud1ValElem.text(player.speed.toFixed(1)+" (Raw: "+player.absoluteSpeed.toFixed(2)+")");
+        hud2ValElem.text(player.onGround?"✔️":"✖️");
+        hud3ValElem.text(player.movement.isSliding?"✔️":"✖️");
+        hud5ValElem.text(player.tiltDegrees?.toFixed(1)+"/"+gameSettings.defaultMaxSlopeAngle);
+        hud4ValElem.text(absoluteFPS.toFixed(0));
+        hudXValElem.text(curPos.x.toFixed(1));hudYValElem.text(curPos.y.toFixed(1));hudZValElem.text(curPos.z.toFixed(1));
+        speedProgressBar.width((player.absoluteSpeed / gameSettings.defaultSprintSpeed) * 100+"%");
+        // TODO: Not working? idk why
+        /*let isSprinting = player.movement.sprinting && player.movement.canSprint;
+        speedProgressBar.attr("background",(isSprinting?"green":"blue")+"!important");*/
+
+        // TODO: Update FPS color based on performance
+        /*
+        switch(absoluteFPS){
+            case absoluteFPS >= highFPS[0]:
+                hudFpsValElem.attr("color",highFPS[1]+"!important");
+                return;
+            case absoluteFPS >= medFPS[0]:
+                hudFpsValElem.attr("color",medFPS[1]+"!important");
+                return;
+            case absoluteFPS >= lowFPS[0]:
+                hudFpsValElem.attr("color",lowFPS[1]+"!important");
+                return;
+        }*/
     }
     if(game.curMenu === "settings"){
         // Constantly updates the debugLabel status to reflect the current `debugMode` state
@@ -134,7 +158,7 @@ settings_backBtn.click(() => {if(game.curMenu !== previousMenu) game.curMenu = p
 settings_debugBtn.click(() => {
     if (!scene.debugLayer.isVisible()) {
         gameSettings.debugMode = true;
-        scene.debugLayer.show();
+        scene.debugLayer.show().then(() => {});
     } else {
         gameSettings.debugMode = false;
         scene.debugLayer.hide();
@@ -146,14 +170,14 @@ settings_applyWalkBtn.click(() => {
     let newWalkSpeed = Number(settings_walkInput.val());
     gameSettings.defaultMoveSpeed = newWalkSpeed;
     player.curMovementSpeed = Number(newWalkSpeed);
-    console.log("Setting walk speed to '"+newWalkSpeed+"' (previously '"+prevWalkSpeed+"')");
+    console.log("Setting walk absoluteSpeed to '"+newWalkSpeed+"' (previously '"+prevWalkSpeed+"')");
 });
 settings_applySprintBtn.click(() => {
     let prevSprintSpeed = gameSettings.defaultSprintSpeed;
     let newSprintSpeed = Number(settings_sprintInput.val());
     gameSettings.defaultSprintSpeed = newSprintSpeed;
     player.sprintSpeed = newSprintSpeed;
-    console.log("Setting walk speed to '"+newSprintSpeed+"' (previously '"+prevSprintSpeed+"')");
+    console.log("Setting walk absoluteSpeed to '"+newSprintSpeed+"' (previously '"+prevSprintSpeed+"')");
 });
 settings_applyJumpBtn.click(() => {
     let prevJumpHeight = gameSettings.defaultJumpHeight;
@@ -162,13 +186,3 @@ settings_applyJumpBtn.click(() => {
     player.jumpHeight = newJumpHeight;
     console.log("Setting jump height to '"+newJumpHeight+"' (previously '"+prevJumpHeight+"')");
 });
-
-/*
-
-Set which screen menus are visible during what times
-
-Update values on-screen (if visible)
-
-Handle menu button presses
-
- */

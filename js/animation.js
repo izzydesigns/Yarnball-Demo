@@ -63,40 +63,40 @@ export function initAnimations() {
  */
 function getAnimationState() {
     // Handle jumping/falling animations
-    if(!player.movement.onGround){
-        if(player.movement.jumping){
-            // TODO: Fix code (not playing???)
-            return animationData.jump;
-        }else{
-            // TODO: Implement start/end frame specifications, and start anim half way through (falling)
-            return animationData.jumpHigh;
-        }
-    }
-
-    // Handle movement stopping animation
-    if(!player.movement.isMoving && player.curAnimation !== animationData.idleStand && player.speed > 0){
-        //console.log("Player stopped moving");
-        return animationData.walkToStand;
+    if(player.movement.jumping){
+        if(gameSettings.debugMode) console.log("Player jumped!");
+        // TODO: Fix code (not playing???)
+        return animationData.jump;
+    }else if(!player.onGround){
+        if(gameSettings.debugMode) console.log("Player is falling!");
+        // TODO: Implement start/end frame specifications, and start anim half way through (falling)
+        return animationData.jumpHigh;
     }
 
     // Handle player.speed changing which animations to use while onGround
-    // Update 1/17/25 - Changed speed comparisons to hard numbers for realistic visual continuity
-    switch (player.movement.onGround) {
-        case player.movement.readyJump && player.movement.onGround && player.speed <= 0.5:
+    // Update 1/22/25 - Changed values for walk trot and gallop to fixed values since player movement values will vary
+    switch (player.onGround) {
+        case player.movement.readyJump && player.onGround && player.speed <= 0.5:
             if(gameSettings.debugMode) console.log("Player ready to jump");
-            return animationData.jumpHighIdle;
-        case player.speed < 0.75 && player.speed > 0:
+            return animationData.standToJumpHighIdle;
+        case player.speed > 0 && !player.movement.isMoving && player.curAnimation !== animationData.idleStand:
+            if(gameSettings.debugMode) console.log("Player stopped moving");
+            return animationData.walkToStand;
+        case player.movement.isSliding:
+            if(gameSettings.debugMode) console.log("Player on steep surface");
+            return animationData.walk;
+        case player.speed <= 1 && player.speed > 0.5:
             if(gameSettings.debugMode) console.log("Player walking");
             return animationData.walk;
-        case player.speed >= 0.75 && player.speed < 2:
+        case player.speed > 1 && player.speed < 2.25:
             if(gameSettings.debugMode) console.log("Player trotting");
             return animationData.trot;
-        case player.speed >= 2:
+        case player.speed >= 2.25:
             if(gameSettings.debugMode) console.log("Player sprinting");
             return animationData.gallop;
         case player.speed === 0:
             // If nothing else has returned by now and player.speed = 0, we must be idling...
-            if(gameSettings.debugMode) console.log("Player idling");
+            //if(gameSettings.debugMode) console.log("Player idling");
             return animationData.idleStand;
     }
 }
@@ -104,11 +104,13 @@ function getAnimationState() {
  * @description Logic code run every frame to detect changes to the player animation state
  */
 export function handleAnimations() {
-    if(player.curAnimation !== player.lastAnimation) {
-        const newState = getAnimationState();
-        if (!newState || newState === player.curAnimation) return;
+    const newState = getAnimationState();
+    if (!newState || newState === player.curAnimation) return;
+    if(player.curAnimation !== newState || player.curAnimation !== player.lastAnimation) {
         player.lastAnimation = player.curAnimation;
+        //player.curAnimation = newState;
         playAnimation(newState);
+        if(gameSettings.debugMode)console.log("playing new anim!",newState);
     }
 }
 /**
@@ -153,6 +155,7 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
 
             // Play the original desired animation, then set isTransitioning to true until animation has completed.
             transitionAnim.reset();transitionAnim.play(false);transitionAnim.weight = 1;
+            if(gameSettings.debugMode)console.log("playing transition anim ☀️️", newAnim[0]," (afterwards play ",newAnim[1],")");
 
             player.isAnimTransitioning = true;
             player.lastAnimation = player.curAnimation;
@@ -162,6 +165,7 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
                 transitionAnim.stop();
                 transitionAnim.weight = 0;
                 idleAnim.reset();idleAnim.play(true);idleAnim.weight = 1;
+                if(gameSettings.debugMode)console.log("playing final anim 🌑️", newAnim[1]);
                 player.isAnimTransitioning = false;
             });
 
@@ -175,6 +179,7 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
             desiredPlayAnim.reset();desiredPlayAnim.start(loop, 1.0, startFrame, endFrame ? endFrame : desiredPlayAnim.to);desiredPlayAnim.weight = 1;
             player.lastAnimation = player.curAnimation;
             player.curAnimation = newAnim;
+            if(gameSettings.debugMode)console.log("playing anim ▶️", newAnim[0]);
             return;
         }
     }
@@ -185,6 +190,18 @@ export function stopAnimation(animName) {
     playingAnimations.forEach(group => {
         group.stop();
         group.weight = 0;
+    });
+}
+export function queueAnimation(animName, loop = true, startFrame = 0, endframe = undefined) {
+    let playingAnimations = scene.animationGroups.filter(group => group.isPlaying);
+    playingAnimations.forEach(animationGroup => {
+        if(animationGroup.loopAnimation) return;
+        animationGroup.onAnimationGroupEndObservable.addOnce(() => {
+            let recheckAnimations = scene.animationGroups.filter(group => group.isPlaying);
+            if(recheckAnimations.length === 0){
+                playAnimation(animName, loop, startFrame, endframe);
+            }
+        });
     });
 }
 export function stopAllAnimations() {
@@ -198,15 +215,9 @@ export function stopAllAnimations() {
         animationGroup.weight = 0; // Set weight to zero
     });
 
-    // Check and stop individual animatables
-    /*scene.animatables.filter(group => !group.paused).forEach(animatable => {
-        anyPlaying = true;
-        animatable.stop(); // Stop the animation
-        animatable.weight = 0; // Set weight to zero
-    });*/
-
     let playingAnimations = scene.animationGroups;
     playingAnimations.forEach(group => {
+        anyPlaying = true;
         group.stop();
         group.weight = 0;
     });

@@ -1,7 +1,6 @@
 import {player, scene, engine, canvas, gameSettings, game} from "./main.js";
 import * as utils from "./utils.js";
-import * as animation from "./animation.js";
-import {animationData} from "./animation.js";
+import {vec3} from "./utils.js";
 
 export let isMobile, isTablet, isAndroid, isiPhone, isiPad;
 /**
@@ -9,34 +8,29 @@ export let isMobile, isTablet, isAndroid, isiPhone, isiPad;
  * @description Also sets player.movement booleans based on keyboard inputs (appropriate `key.code` values are fetched from `gameSettings.controls`)
  */
 export function initKeyboardListeners() {
+    let debugLayer = scene.debugLayer;
     const input = gameSettings.controls;
     window.addEventListener("keydown", function (key) {
-        console.log(key.code);
-        //key.preventDefault(); // Potentially useful for future applications
+        //key.preventDefault(); // Possibly useful for future applications, it can help prevent Tab from tabbing out of the game
         if (key.repeat) return; // Don't allow repeat keypress via holding key down
+        console.log(key.code);
         if (key.code === input.forward || key.code === input.back || key.code === input.left || key.code === input.right) {
-            player.movement.isMoving = true;// Sets isMoving to true if player is pressing any movement keys
+            player.movement.isMoving = true; // Sets isMoving to true if player is pressing any directional keys
         }
         if (key.code === input.forward) {player.movement.forward = true;}
         if (key.code === input.back) {player.movement.back = true;}
         if (key.code === input.left) {player.movement.left = true;}
         if (key.code === input.right) {player.movement.right = true;}
-        if (key.code === input.jump && !player.movement.readyJump) {player.movement.readyJump = true;}
-        if (key.code === input.sprint) {player.movement.sprinting = true;}
+        if (key.code === input.jump && !player.movement.readyJump && !player.movement.isSliding) {player.movement.readyJump = true;}
+        if (key.code === input.sprint && player.movement.canSprint) {player.movement.sprinting = true;}
         if (key.code === "NumpadAdd") {
-            // Hard play specified animation (no player.curAnimation get/set)
-            const desiredAnim = animationData.idleSleep;
-            const sleepAnim = scene.getAnimationGroupByName(desiredAnim[0]);
-            if (!sleepAnim) return;
-            animation.stopAllAnimations();
-            sleepAnim.reset();
-            sleepAnim.start(true, 2);
-            sleepAnim.weight = 1;
-
+            utils.teleportPlayer(vec3(0,30,0));
+            utils.deleteMeshesByName("generateRandomBoxes");
+            utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]],5);
+            utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]]);
         }
         if (key.code === "NumpadSubtract"){
-            //player.curAnimation = animation.animationData.idleSleep;
-            //animation.playAnimation(player.curAnimation[0], true);
+            console.error("%cYou're doing a great job, keep it up!!! ❤️❤️❤️", 'color: #111; font-size: 32px; background-color: #aaee88;');
         }
     });
     window.addEventListener("keyup", function (key) {
@@ -47,21 +41,21 @@ export function initKeyboardListeners() {
             if (key.code === input.left) {player.movement.left = false;}
             if (key.code === input.right) {player.movement.right = false;}
             if (key.code === input.jump && player.movement.readyJump) {
-                player.movement.jumping = player.movement.onGround;
+                player.movement.jumping = player.onGround;
                 player.movement.readyJump = false;
             }
             if (!player.movement.jumping && !player.movement.forward && !player.movement.back && !player.movement.left && !player.movement.right){
                 player.movement.isMoving = false;
             }
         }
-        if (key.code === input.sprint) {player.movement.sprinting = false;}
-        if (key.code === "NumpadMultiply") {// Tab key to toggle debug mode
+        if (key.code === input.sprint && player.movement.sprinting) {player.movement.sprinting = false;}
+        if (key.code === gameSettings.controls.developerMenu) {// Tab key to toggle debug mode
             if (!scene.debugLayer.isVisible()) {
                 gameSettings.debugMode = true;
-                scene.debugLayer.show();
+                debugLayer.show();
             } else {
                 gameSettings.debugMode = false;
-                scene.debugLayer.hide();
+                debugLayer.hide();
             }
             console.log("Toggling debug layer",gameSettings.debugMode);
         }

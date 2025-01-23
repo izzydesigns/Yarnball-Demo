@@ -12,7 +12,9 @@ let createScene = () => {
 
 	// Add lights
 	let light1 = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(1, 1, 0), scene);
+	light1.intensity = 0.8;
 	let light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(0, 1, -1), scene);
+	light2.intensity = 0.6
 
 	// Meshes
 	let sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {diameter:2}, scene);
