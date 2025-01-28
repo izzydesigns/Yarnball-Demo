@@ -21,36 +21,38 @@ export let game = {
 	prevMenu: "",
 	menus: ["ingame","pause","main","settings"],
 	physicsImpostors: [],
-	excludedFromCollisions: [],
+	excludeFromRayResults: [],
 	animations: [],
 	lights: [],
 	shadowGenerators: [],
 };
 export const gameSettings = {
 	defaultMoveSpeed: 1,
-	defaultMoveAccelerate: 0.04, // How quickly player reaches max absoluteSpeed, 0.2 = 5 frames later
-	defaultMoveDelay: 0.5, // (set to negative value) How many seconds(?) to wait before player movement begins
+	defaultMoveAccelerate: 0.04, // How quickly player reaches max horizontalSpeed, 0.2 = 5 frames later
+	defaultMoveDelay: 0, // Pause duration before movement is allowed TODO: Set this to the specified turn anim's duration (if player.body is turning/rotating)
+	defaultWalkSpeed: 0.5,
 	defaultSprintSpeed: 3,
 	defaultJumpHeight: 2.5,
 	defaultJumpDelay: 1, // Seconds until canJump is set to true again after jumping
 	defaultMinJumpHeight: 1,
-	defaultMaxVelocity: 8,
+	defaultMaxVelocity: 10, // Must be at least twice the sprint speed(?)
 	defaultFriction: 0.115, //1 being instant friction, 0 being zero friction
 	defaultIdleAnimation: ["cat_idleStandA"],
 	defaultAnimBlendValue: 0.1, // Set to zero in order to disable animation blending & weights
 	defaultCameraDistance: 3,
-	defaultCamOffset: vec3(0,0.165,0),//0.125),
+	defaultCamOffset: vec3(0,0.165,0.125),//0.125),
 	defaultPlayerMass: 5,
 	defaultRotationSpeed: 0.025,
 	defaultMaxSlopeAngle: 40,
-	defaultSteepAngle: 20,
+	defaultSlopeAngle: 20,
+	defaultPlayerScale: 1, // Default amount to scale loaded player mesh up by (in all directions)
 	defaultSpawnPoint: vec3(0,8,0),
 	defaultGravity: vec3(0, -9, 0), // Set gravity to value that `feels` right rather than real world values
 	defaultMenu: "main",
-	jumpDetectionBuffer: 0.2, // If jump spamming = multi jump, change this to zero?
+	jumpDetectionBuffer: 0.05, // If jump spamming = multi jump, change this to zero?
 	controls: {
 		forward: "KeyW",left: "KeyA",back: "KeyS",right: "KeyD",
-		jump: "Space",sprint: "ShiftLeft",
+		jump: "Space",sprint: "ShiftLeft",walk: "AltLeft",
 		developerMenu: "NumpadMultiply",
 	},
 	askBeforeClosing: false,
@@ -69,6 +71,7 @@ export let player = {
 		jumping: false,
 		readyJump: false,
 		sprinting: false,
+		walking: false,
 		forward: false,
 		back: false,
 		left: false,
@@ -78,11 +81,12 @@ export let player = {
 	curLookDirection: vec3(),
 	curDownVector: vec3(),
 	tiltDegrees: null,
+	colliding: false,
 	curMovementSpeed: gameSettings.defaultMoveSpeed,
 	prevSpeed: 0,
 	sprintSpeed: gameSettings.defaultSprintSpeed,
 	maxVelocity: gameSettings.defaultMaxVelocity,
-	absoluteSpeed: 0,
+	horizontalSpeed: 0,
 	speed: 0,
 	jumpHeight: gameSettings.defaultJumpHeight,
 	movementDirection: BABYLON.Vector3.Zero(),
@@ -91,14 +95,9 @@ export let player = {
 	isAnimTransitioning: false,
 	lastMoveTime: 0,
 	lastJumpTime: 0,
-	camera: new BABYLON.ArcRotateCamera(
-		"camera",
-		Math.PI / 2, // Alpha (horizontal rotation)
-		Math.PI / 3, // Beta (vertical rotation)
-		gameSettings.defaultCameraDistance, // Radius (distance from the target)
-		undefined, // Target (initialized later)
-		scene
-	),
+	camera: undefined,
+	ragdoll: undefined,
+	scale: gameSettings.defaultPlayerScale, // TODO: Adjust/scale final movement speed based on the player.scale value?
 };
 
 /**
@@ -106,14 +105,22 @@ export let player = {
  * @todo Possibly move createScene function code into utils.js or a new `sceneHandler.js` file
  */
 const createScene = async () => {
-	// PHYSICS AND GRAVITY
-	/* See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep */
+	/* PHYSICS AND GRAVITY */
+	// See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep
 	let physEngine = new BABYLON.CannonJSPlugin(false);
 	scene.enablePhysics(gameSettings.defaultGravity, physEngine); // Using Cannon.js for physics
 	physEngine.setTimeStep(1 / 60);
 	engine.renderEvenInBackground = false;
 
-	// CAMERA
+	/* CAMERA */
+	player.camera = new BABYLON.ArcRotateCamera(
+		"camera",
+		Math.PI / 2, // Alpha (horizontal rotation)
+		Math.PI / 3, // Beta (vertical rotation)
+		gameSettings.defaultCameraDistance, // Radius (distance from the target)
+		undefined, // Target (initialized later)
+		scene
+	);
 	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
 	player.camera.wheelPrecision = 150;
 	player.camera.lowerRadiusLimit = 0.25; //how close can the camera come to player
@@ -121,75 +128,106 @@ const createScene = async () => {
 	player.camera.minZ = 0.001;
 	//player.camera.checkCollisions = true; //moves camera closer if being obscured by geometry
 
-	// LIGHTING
-	// Lights
-	const ambientLight = new BABYLON.HemisphericLight("ambientLight", vec3(-1, -1, -1), scene);
-	ambientLight.position = vec3(0,50,0);
-	ambientLight.intensity = 0.2; // Soft ambient lighting
-	const sunLight = new BABYLON.DirectionalLight("sunLight", vec3(-1, -2, -1), scene);
-	sunLight.position = vec3(50, 100, 50); // Position of the light source
-	sunLight.intensity = 1.5; // Brightness of the sunlight
-	sunLight.diffuse = new BABYLON.Color3(1, 1, 0.95);
-	sunLight.specular = new BABYLON.Color3(1, 1, 0.8); // Light reflections
-	game.shadowGenerators.push(utils.createShadowGenerator(sunLight,undefined,undefined,undefined,undefined,true));
-	// ( See: doc.babylonjs.com/features/featuresDeepDive/lights/shadows )
+	/* LIGHTING & SHADOWS */
+	// Create main light source (sun)
+	let sunLight = utils.createDirectionalLight("sunLight", vec3(-1.5, -1.5, -1.5), vec3(20, 50, 20));
+	sunLight.intensity = 0.9;
+	sunLight.shadowMaxZ = 1000; // Necessary
+	// Create & set ambient lighting with tiny intensity level (just so shadowed areas aren't 100% black)
+	let ambientLight = utils.createHemisphereLight("ambientLight");
+	ambientLight.intensity = 0.025;
+	// Create & init shadowGenerator for our single directional light (sunLight)
+	let sunLightShadow = new BABYLON.ShadowGenerator(1024 * 4, sunLight);
+	sunLightShadow.useContactHardeningShadow = true;
+	sunLightShadow.darkness = 0.25; // Lower value = darker shadows (counter-intuitive)
+	// Adjust biases to reduce shadow artifacts (light bleeding or acne)
+	sunLightShadow.bias = 0.0002;
+	sunLightShadow.normalBias = 0.0001;
+	game.shadowGenerators.push(sunLightShadow);
 
-	// LOAD WORLD MESHES & PHYSICSIMPOSTORS
-	// Create ground
-	utils.generateBox("ground", vec3(50,5,50), undefined, "#448844");
-	// Spawn 100 random platforms, half of which have 5 mass while the rest are static.
-	utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]]);
-	utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]],5);
+	/* MESHES & PHYSICSIMPOSTORS */
+	// Create ground surface
+	utils.generateBox(
+		"ground", vec3(50,1,50), vec3(0,-0.5,0),
+		utils.createMat("groundMat", utils.newHexColor("#448844"))
+	);
 	// Load player mesh into player.mesh & create physicsImpostor for player.body
-	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_new.glb", scene, undefined, undefined).then((result) => {
+	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_default.glb", scene, undefined, undefined).then((result) => {
+		const meshScale = gameSettings.defaultPlayerScale * player.scale;
 		result.meshes[1].name = result.meshes[1].id = "playerMesh"; // Manually set mesh name & id to playerMesh
+		result.meshes[1].receiveShadows = true; // Enable shadows on actual mesh geometry
 		player.mesh = result.meshes[0]; // Initialize player.mesh with loaded mesh
-		player.mesh.scaling = vec3(2, 2, 2);
-		player.mesh.skeleton = scene.getSkeletonByName("Player"); // Init & store skeleton object
-		player.mesh.skeleton.enableBlending(1);
+		player.mesh.scaling = vec3(meshScale*2, meshScale*2, meshScale*2); // Scales player model up x2 (originally tiny)
+		player.mesh.skeleton = result.skeletons[0]; // Init & store skeleton object
+		player.mesh.skeleton.enableBlending(1); // Set animation blending speed
+
+		// Create a dummy cube to parent the camera to, which is then tied to the player (and enables us to offset the camera)
 		const cameraOffset = player.mesh.position.addInPlace(gameSettings.defaultCamOffset);
 		const offsetMesh = BABYLON.MeshBuilder.CreateBox("camOffset",{size:0.01},scene);
-		offsetMesh.position = cameraOffset;
-		offsetMesh.parent = player.mesh;
-		offsetMesh.checkCollisions = false;
-		offsetMesh.isVisible = false;
-		player.camera.setTarget(offsetMesh); // Set camera target to player mesh after being loaded
+		offsetMesh.position = cameraOffset;offsetMesh.parent = player.mesh;
+		offsetMesh.checkCollisions = false;offsetMesh.isVisible = false;
+		game.shadowGenerators[0].addShadowCaster(result.meshes[1]);
+		player.camera.setTarget(offsetMesh); // Set camera target to offset mesh, which is parented to player.mesh
 
-		// Add player model to all shadowGenerators in game.shadowGenerators[]
-		utils.addMeshToShadowGens(result.meshes[0]);
-
-		// Create simple box for movement and collision handling
+		// Create simple box collider for player movement and collision handling
 		// TODO: adjust bounding box height for dif animations? aka jumping, crouch, etc
-		player.body = BABYLON.MeshBuilder.CreateBox("playerBody",{width: 0.175, height: 0.4, depth: 0.6},scene);
+		player.body = BABYLON.MeshBuilder.CreateBox("playerBody",{width: 0.175 * player.scale, height: 0.4 * player.scale, depth: 0.6 * player.scale},scene);
 		player.body.physicsImpostor = new BABYLON.PhysicsImpostor(
-			player.body,
-			BABYLON.PhysicsImpostor.BoxImpostor, // Choose the appropriate shape
-			{ mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0 },      // Adjust mass and physics properties
-			scene
+			player.body, BABYLON.PhysicsImpostor.BoxImpostor,
+			// TODO: We currently set friction to 0 & use custom friction in movement.js... Maybe fix this so using object friction values isn't totally useless on the player?
+			{ mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0 },scene
 		);
 		player.body.physicsImpostor.angularDamping = 0; // Zero damping for instant turning
 		player.body.isVisible = gameSettings.debugMode; // Initialize player.body visibility based on initial `debugMode` status
 		player.body.position = gameSettings.defaultSpawnPoint;
 		player.body.rotationQuaternion = new BABYLON.Quaternion(0,0,0,1);
 	});
+	// Load default 1x1 meter cube from Blender (for world size/scale calibration)
+	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "defaultCube_1x1.glb", scene, undefined, undefined).then((result) => {
+		let resultMesh = result.meshes[1];
+		let boundingBox = resultMesh.getBoundingInfo().boundingBox;
+		let bbWidth = boundingBox.maximum.x - boundingBox.minimum.x;
+		let bbHeight = boundingBox.maximum.y - boundingBox.minimum.y;
+		let bbDepth = boundingBox.maximum.z - boundingBox.minimum.z;
+		const colliderMesh = BABYLON.MeshBuilder.CreateBox("cubeCollider",{width:bbWidth, height:bbHeight, depth:bbDepth},scene);
+		new BABYLON.PhysicsImpostor(colliderMesh,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+		colliderMesh.isVisible = false;
+		colliderMesh.parent = result.meshes[1];
+		resultMesh.position = vec3(0, 1, 5);
+		resultMesh.receiveShadows = true;
+		game.shadowGenerators[0].addShadowCaster(resultMesh, true);
+	});
+	// Load wall test (for further calibration) TODO: Fix boundingBox info to assign proper colliderMesh size (only working with cube currently)
+	/*await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "wall.glb", scene, undefined, undefined).then((result) => {
+		let resultMesh = result.meshes[1];
+		let boundingBox = resultMesh.getBoundingInfo().boundingBox;
+		let bbWidth = boundingBox.maximum.x - boundingBox.minimum.x;
+		let bbHeight = boundingBox.maximum.y - boundingBox.minimum.y;
+		let bbDepth = boundingBox.maximum.z - boundingBox.minimum.z;
+		console.log(boundingBox);
+		const colliderMesh = BABYLON.MeshBuilder.CreateBox("wallCollider",{width:bbWidth, height:bbHeight, depth:bbDepth},scene);
+		new BABYLON.PhysicsImpostor(colliderMesh,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+		colliderMesh.isVisible = false;
+		colliderMesh.parent = result.meshes[1];
+		resultMesh.position = vec3(0, 0, 5);
+	});*/
 
-	// REGISTER INPUT, WINDOW, ANIMATION & DEBUG HANDLERS
+	/* REGISTER INPUT, WINDOW, ANIMATION & DEBUG HANDLERS */
 	animation.initAnimations();
 	inputs.initWindowFunctions();
 	inputs.initKeyboardListeners();
 	screen.initScreenElements();
-	utils.showAxisHelper(10, vec3(10,2.5, 10));
 
-	// Update shadowGenerators with previously created/initialized meshes
-	scene.meshes.forEach(mesh => {
-		if (mesh.name !== "excludedMeshName"){
-			for(let i in game.shadowGenerators){
-				//console.log("shadowGenerator["+i+"]",game.shadowGenerators[i]);
-				game.shadowGenerators[i].addShadowCaster(mesh);
-			}
-		}
-	});
-	game.excludedFromCollisions.push(scene.getMeshByName("playerBody"),scene.getMeshByName("playerMesh"),scene.getMeshByName("camOffset"));
+	// Initialize game.excludeFromRayResults to prevent `utils.rayCast(...).hit` from returning these mesh(es)
+	game.excludeFromRayResults.push(
+		scene.getMeshByName("playerMesh"), // Player mesh
+		scene.getMeshByName("playerBody"), // Player body physicsImpostor
+		scene.getMeshByName("camOffset"), // Mesh that the camera targets
+	);
+
+	// Draw axisHelpers if `debugMode` = true during scene creation
+	if(gameSettings.debugMode) utils.showAxisHelper(10, vec3(10,2.5, 10));
+
 	return scene;
 };
 
@@ -216,19 +254,19 @@ createScene().then((scene) => {
 
 	// BEFORE PHYSICS CALCULATION for player body physicsImpostor
 	/*player.body.physicsImpostor.registerBeforePhysicsStep((impostor) => {
-		// Bugged, only detects "playerBody" physicsImpostor (...itself?)
+		// STILL bugged, when ignoring playerBody mesh, none of the following code is called???
+		// TODO: Use something other than player.body.physicsImpostor to add registerBeforePhysicsStep to?
 		console.log("About to collide with: ", impostor.object.name);
+		let invalidMesh = scene.getMeshByName("playerBody");
+		if(impostor === invalidMesh.physicsImpostor) return;
 	});*/
 
 	// player body ON PHYSICS COLLIDE with other physicsImpostors
 	player.body.physicsImpostor.registerOnPhysicsCollide(scene.meshes.filter(() => scene.getMeshByName("playerBody") || scene.getMeshByName("playerMesh")).map(mesh => mesh.physicsImpostor), (collider, collidedAgainst) => {
 		// Note: This code also caused HUGE dips in FPS
-		if(gameSettings.debugMode)console.log("COLLISION! 💥", collider, collidedAgainst);
-		//let colliderMesh = scene.getMeshByName("playerMesh");
-		if(gameSettings.debugMode)console.log(collider.object.name, collidedAgainst.object.name);
+		if(gameSettings.debugMode)console.log("COLLISION! 💥 '", collider.object.name, "' collided against '", collidedAgainst.object.name, "'");
 		// Check if we are colliding with a surface below us or not
 		const collidedMesh = collidedAgainst.object; if (!collidedMesh) return;
-		//console.log(collidedAgainst);
 		// Calculate the surface normal of the collided mesh
 		const surfaceNormal = utils.getSurfaceNormal(collidedMesh, 3, false); if (!surfaceNormal) return;
 		let isOnSlant = player.tiltDegrees >= gameSettings.defaultMaxSlopeAngle;

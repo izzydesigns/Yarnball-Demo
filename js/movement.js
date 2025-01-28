@@ -2,48 +2,54 @@ import {game, gameSettings, player} from "./main.js";
 import * as utils from "./utils.js";
 import {clampVector3ToMaxLength, quat, vec, vec3} from "./utils.js";
 
-let desiredMovement = vec3(), moveDelayDelta = 0;
+let desiredMovement = vec3(), moveDelayDelta = 0, lastJumpTime = 0;
+export let jumpedTooRecently = false;
 /**
  * @desc Handles the player movement and applies forces to the `player.body` based on desired direction.
  * @desc Determines which direction and how strong the force is based on factors like `gameSettings.maxDefaultMoveSpeed
  */
 export function handleMovement () {
     const cameraRotation = -player.camera.alpha; // Negative value because we're in third person and we want the forward direction
-    const camForward = utils.vec3(Math.sin(cameraRotation), 0, Math.cos(cameraRotation)).normalize();
-    const camRight = utils.vec3(Math.sin(cameraRotation - Math.PI / 2), 0, Math.cos(cameraRotation - Math.PI / 2)).normalize();
-    let lerpedVelo = vec3(), curLinearVelo = player.body.physicsImpostor.getLinearVelocity();
-    let finalVelocity = vec3();
-    player.curLookDirection = player.camera.getDirection(player.body.position);
-    player.prevSpeed = player.speed; // Update player.prevSpeed before absoluteSpeed gets updated
-
+    const camForward = vec3(Math.sin(cameraRotation), 0, Math.cos(cameraRotation)).normalize();
+    const camRight = vec3(Math.sin(cameraRotation - Math.PI / 2), 0, Math.cos(cameraRotation - Math.PI / 2)).normalize();
+    let lerpedVelo = vec3(), finalVelocity = vec3(), curLinearVelo = player.body.physicsImpostor.getLinearVelocity();
+    // Initialize jump delay timer
+    //if(lastJumpTime===0)lastJumpTime=game.time - gameSettings.defaultJumpDelay;
     // Check & sets canMove, canJump and onGround = true if rayCast below player = true (is colliding below)
-    let onGroundCheck = utils.checkCanJump(0.2 + 0.05/* Half player height (+ buffer for slopes) */);
+    let onGroundCheck = utils.checkCanJump((0.2 + gameSettings.jumpDetectionBuffer) * player.scale /* Half player height + buffer for slopes */);
     // Set onGround, canJump, and canSprint to true if the onGroundCheck.hit returns a value
-    player.onGround = player.movement.canJump = player.movement.canSprint = onGroundCheck.hit;
+    player.onGround = player.movement.canJump = player.colliding = onGroundCheck.hit;
+    player.curLookDirection = player.camera.getDirection(player.body.position);
+    player.prevSpeed = player.speed; // Update player.prevSpeed before horizontalSpeed gets updated
 
-    // Handles jump force calculation & sets movement.jumping back to false
+    // Handles jump force calculation & sets movement.jumping back to false any time it's set to true
     let addJumpForce = false;
-    if (player.movement.canMove && player.onGround && player.movement.jumping && !player.movement.isSliding) {
-        desiredMovement.addInPlace((utils.getPlayerDownDirection().scale(-1)).scale(player.jumpHeight)); // Add vertical force
-        addJumpForce = true;
-        player.movement.jumping = false;
+    if (player.movement.jumping && player.onGround && player.movement.canMove && !player.movement.isSliding && player.speed > 0.1) {
+        jumpedTooRecently = game.time < lastJumpTime + (gameSettings.defaultJumpDelay*1000);
+        if(gameSettings.debugMode) console.log(jumpedTooRecently, " = ", game.time, "<", lastJumpTime, "+", (gameSettings.defaultJumpDelay*1000));
+        if(!jumpedTooRecently){
+            lastJumpTime = game.time;
+            desiredMovement.addInPlace((utils.getPlayerDownDirection().scale(-1)).scale(player.jumpHeight)); // Add vertical force
+            addJumpForce = true;
+        }
     }
+    if(player.movement.jumping)player.movement.jumping = false;
 
     if(player.movement.canMove && player.movement.isMoving && !player.movement.isSliding) {
         // Update lastMoveTime to game.time value
         player.lastMoveTime = game.time;
 
-        if (player.movement.right) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward), gameSettings.defaultMaxVelocity);
-        if (player.movement.left) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward.scale(-1)), gameSettings.defaultMaxVelocity);
-        if (player.movement.back) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight.scale(-1)), gameSettings.defaultMaxVelocity);
-        if (player.movement.forward) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight), gameSettings.defaultMaxVelocity);
+        if (player.movement.right) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward), player.maxVelocity);
+        if (player.movement.left) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward.scale(-1)), player.maxVelocity);
+        if (player.movement.back) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight.scale(-1)), player.maxVelocity);
+        if (player.movement.forward) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight), player.maxVelocity);
 
 
         // Caps horizontal movement to the player.curMovementSpeed value (preserving y-axis forces)
         if (!desiredMovement.equals(vec3())) {
             // Set desired Y movement by saving previous desiredMovement value & scale it by the jumpForce
-            let jumpForce = player.jumpHeight + gameSettings.defaultMinJumpHeight + (player.absoluteSpeed);
-            let desiredJumpY = clampVector3ToMaxLength(desiredMovement.normalize().scaleInPlace(jumpForce), gameSettings.defaultMaxVelocity).y;
+            let jumpForce = player.jumpHeight + gameSettings.defaultMinJumpHeight + (player.horizontalSpeed);
+            let desiredJumpY = clampVector3ToMaxLength(desiredMovement.normalize().scaleInPlace(jumpForce), player.maxVelocity).y;
             desiredMovement.normalize().scaleInPlace(player.curMovementSpeed);
             // If we are adding jump force this frame... use preserved Y value
             desiredMovement.y = (addJumpForce) ? desiredJumpY : curLinearVelo.y;// Restore y-axis if jumping
@@ -51,15 +57,15 @@ export function handleMovement () {
 
         // Gradual force scaling (and delay) before force gets applied to player
         moveDelayDelta = Number(moveDelayDelta.toFixed(3)); // Remove floating point precision errors
-        let velocityDeltaScaled = utils.vec3(desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).x, desiredMovement.y, desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).z);
-        lerpedVelo = (moveDelayDelta > 0 ? velocityDeltaScaled : clampVector3ToMaxLength(curLinearVelo, gameSettings.defaultMaxVelocity));
+        let velocityDeltaScaled = vec3(desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).x, desiredMovement.y, desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).z);
+        lerpedVelo = (moveDelayDelta > 0 ? velocityDeltaScaled : clampVector3ToMaxLength(curLinearVelo, player.maxVelocity));
         if(moveDelayDelta < 1)moveDelayDelta += gameSettings.defaultMoveAccelerate;
 
         // Quantize direction of lerpedVelo to 45-degree increments
         const angle = Math.atan2(lerpedVelo.x, lerpedVelo.z);
         const quantizedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
         const magnitude = lerpedVelo.length();
-        finalVelocity = utils.vec3(
+        finalVelocity = vec3(
             Math.sin(quantizedAngle) * magnitude,
             lerpedVelo.y, // Preserve Y component for vertical movement
             Math.cos(quantizedAngle) * magnitude
@@ -67,54 +73,64 @@ export function handleMovement () {
 
     }
 
-    // Apply absoluteSpeed reduction if player.tiltDegrees > gameSettings.gameSettings.defaultMaxSlopeAngle
+    // Apply speed reduction if player.tiltDegrees > gameSettings.gameSettings.defaultMaxSlopeAngle
     if(player.onGround) {
-        if (player.tiltDegrees > gameSettings.defaultSteepAngle) {
-            // Handle forcing defaultMoveSpeed on slopes that are tilted greater than set in defaultSteepAngle
-            finalVelocity = finalVelocity.normalize();//.scale(gameSettings.defaultMoveSpeed);
-            //player.movement.canSprint = false;
+        if (player.tiltDegrees > gameSettings.defaultSlopeAngle) {
+            // Handle forcing defaultMoveSpeed on slopes that are tilted greater than set in defaultSlopeAngle
+            //finalVelocity = finalVelocity.normalize();//.scale(gameSettings.defaultMoveSpeed);
+            player.movement.canSprint = false;
             player.movement.canJump = false;
-            if (gameSettings.debugMode) console.log("SCALING VELOCITY TO ", finalVelocity.length().toFixed(2), " BASED ON CURRENT SLOPE", player.tiltDegrees);
+            //if (gameSettings.debugMode) console.log("SCALING VELOCITY TO ", finalVelocity.length().toFixed(2), " BASED ON CURRENT SLOPE", player.tiltDegrees);
         } else {
             // Handle sprinting (updating curMovementSpeed value, used to scale finalVelocity value)
-            if (player.movement.sprinting && player.movement.canSprint) {
-                if (player.curMovementSpeed <= player.sprintSpeed) {player.curMovementSpeed += gameSettings.defaultMoveAccelerate;}
-            } else {
-                if (player.curMovementSpeed > gameSettings.defaultMoveSpeed) {player.curMovementSpeed -= gameSettings.defaultMoveAccelerate;}
+            if(player.movement.walking) {
+                if (player.curMovementSpeed > gameSettings.defaultWalkSpeed) player.curMovementSpeed -= gameSettings.defaultMoveAccelerate;
+                //if (player.curMovementSpeed < gameSettings.defaultWalkSpeed) player.curMovementSpeed += gameSettings.defaultMoveAccelerate;
+            }else if(player.movement.sprinting){
+                if (player.curMovementSpeed < gameSettings.defaultSprintSpeed) player.curMovementSpeed += gameSettings.defaultMoveAccelerate;
+            }else{
+                // Re-adjust curMovementSpeed if player was sprinting
+                if(player.curMovementSpeed > gameSettings.defaultMoveSpeed) player.curMovementSpeed -= gameSettings.defaultMoveAccelerate;
+                // Re-adjust curMovementSpeed if player was walking
+                if(player.curMovementSpeed < gameSettings.defaultMoveSpeed) player.curMovementSpeed += gameSettings.defaultMoveAccelerate;
             }
         }
     }
 
     if(!player.movement.isMoving){
-        // Apply simulated friction if player's absoluteSpeed is greater than zero & player is onGround
-        if((player.absoluteSpeed > 0 && player.onGround) && !player.movement.isSliding){
-            if(gameSettings.debugMode) console.log("Simulating friction!", player.absoluteSpeed);
+        // Apply simulated friction if player's horizontalSpeed is greater than zero & player is onGround
+        if((player.horizontalSpeed > 0 && player.onGround) && !player.movement.isSliding){
+            if(gameSettings.debugMode) console.log("Simulating friction!", player.horizontalSpeed);
             let oldYVelo = curLinearVelo.y;
-            finalVelocity = new BABYLON.Vector3(curLinearVelo.x, oldYVelo, curLinearVelo.z).scale(1 - gameSettings.defaultFriction);
+            finalVelocity = new BABYLON.Vector3(curLinearVelo.x, 0, curLinearVelo.z).scale(1 - gameSettings.defaultFriction);
+            finalVelocity.y = oldYVelo;
+            if(finalVelocity.length() <= 0.01){
+                finalVelocity = vec3(0, oldYVelo, 0);
+                if(gameSettings.debugMode) console.log("Halting all player movement! finalVelocity.length() < 0.01");
+            }
         }else{
-            //console.log("Preserve absoluteSpeed, no friction");
-            //console.log("Speed?", player.absoluteSpeed, "onGround?", player.movement.onGround);
+            // Preserve horizontalSpeed, no friction
             finalVelocity = curLinearVelo;
         }
         // Set moveDelayDelta to negative value to add movement delay
-        if(moveDelayDelta > gameSettings.defaultMoveDelay)moveDelayDelta -= gameSettings.defaultMoveAccelerate; // Reduce value by `gameSettings.defaultMoveAccelerate` to re-enable gradual deceleration
-    }
-    if(finalVelocity.y < gameSettings.defaultGravity.y){
-        console.log(finalVelocity.y, gameSettings.defaultGravity.y);
-        finalVelocity.y = gameSettings.defaultGravity.y;
+        if(moveDelayDelta > -gameSettings.defaultMoveDelay)moveDelayDelta -= gameSettings.defaultMoveAccelerate; // Reduce value by `gameSettings.defaultMoveAccelerate` to re-enable gradual deceleration
     }
 
-    // Update player `curMovementSpeed`, `movementDirection`, and `absoluteSpeed` values with final calculated values
+    // Limit velocity to player.maxVelocity value
+    if(finalVelocity.length() > player.maxVelocity) finalVelocity = clampVector3ToMaxLength(curLinearVelo, player.maxVelocity);
+    //console.log(finalVelocity.length(), clampVector3ToMaxLength(curLinearVelo, player.maxVelocity).length());
+
+    // FINALLY, as the last step, apply the finalVelocity to our player.body.physicsImpostor
+    player.body.physicsImpostor.setLinearVelocity(finalVelocity);
+
+    // Update player `curMovementSpeed`, `movementDirection`, and `horizontalSpeed` values with final calculated values
     player.curMovementSpeed = Number(player.curMovementSpeed.toFixed(3)); // Fix rounding errors
     player.movementDirection = desiredMovement;
     let tempSpeed = player.body.physicsImpostor.getLinearVelocity().scale(0.99);
 
     player.speed = Number(tempSpeed.length().toFixed(2)); // Fix rounding errors
-    player.absoluteSpeed = Number(new BABYLON.Vector3(tempSpeed.x, 0, tempSpeed.z).length().toFixed(2)); // Calculate and store the horizontal absoluteSpeed
-    //console.log(player.speed, player.absoluteSpeed);
-
-    // FINALLY, as the last step, apply the finalVelocity to our player.body.physicsImpostor
-    player.body.physicsImpostor.setLinearVelocity(finalVelocity);
+    player.horizontalSpeed = new BABYLON.Vector3(tempSpeed.x, 0, tempSpeed.z).length(); // Calculate and store the horizontalSpeed
+    if(gameSettings.debugMode) console.log(player.speed, player.horizontalSpeed);
 }
 
 let desiredRotation = quat(0,0,0,0);
@@ -124,47 +140,52 @@ let desiredRotation = quat(0,0,0,0);
  * @todo Use current `camera` angle to quantize values instead, some time in the future
  */
 export function handleRotationAndPosition() {
-    let getCurVelo = player.body.physicsImpostor.getAngularVelocity();
     const normalizedDirection = player.movementDirection.normalize();
     // Calculate desired Y-axis angle from `desiredMovement`, quantize to 45 deg
     let angle = Math.atan2(normalizedDirection.x, normalizedDirection.z);
     const quantizedYAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-
     // Get the surface normal from the ground below the player
     let surfaceNormal = utils.getSurfaceNormal(player.body, 0.5, true);if (!surfaceNormal) return;
+    // Create a quaternion to align the player's body with the surface normal
+    const surfaceRotation = BABYLON.Quaternion.FromLookDirectionLH(BABYLON.Vector3.Cross(vec.right.scale(-1), surfaceNormal),surfaceNormal);
+    desiredRotation = surfaceRotation.multiply(BABYLON.Quaternion.FromEulerAngles(0, quantizedYAngle, 0));
+
     // Calculate the angle between the surface normal and Vector3.Up() vector
-    const angleBetween = Math.acos(BABYLON.Vector3.Dot(surfaceNormal.normalize(), vec.up));
+    const angleBetween = Math.acos(BABYLON.Vector3.Dot(surfaceNormal?.normalize(), vec.up));
     const angleDeg = BABYLON.Tools.ToDegrees(angleBetween);
     player.tiltDegrees = angleDeg;
-    if(angleDeg <= gameSettings.defaultMaxSlopeAngle && angleDeg !== 0){
+    if(angleDeg <= gameSettings.defaultMaxSlopeAngle && angleDeg >= 0){
+        if(gameSettings.debugMode) console.log("ANGLE IS SLIGHTLY SLOPED: ",angleDeg);
+        if(gameSettings.debugMode) console.log("Setting canMove to true, sliding to false, and if on ground, canSprint to true");
         player.movement.isSliding = false;
         player.movement.canMove = true;
         if(player.onGround)player.movement.canSprint = true;
         //if(gameSettings.debugMode)console.log("using surface normal for desiredrotation ⚠️: angleDeg =",angleDeg);
-    }else if(angleDeg > gameSettings.defaultMaxSlopeAngle) {
+    }else if(angleDeg > gameSettings.defaultMaxSlopeAngle && angleDeg < 90) {
         player.movement.isSliding = true;
-        player.movement.canMove = false;
-        player.movement.canSprint = false;
-        player.movement.isMoving = false;
+        player.movement.canMove = player.movement.canSprint = player.movement.isMoving = false;
+        // Override final desiredRotation value
+        desiredRotation = BABYLON.Quaternion.FromEulerVector(vec.up); // Default to upward rotation
+        if(gameSettings.debugMode) console.log("ANGLE IS SLOPED (but less than 90): ",angleDeg);
+        if(gameSettings.debugMode) console.log("Setting rotation to default up direction");
         //if(gameSettings.debugMode)console.log("ON STEEP SURFACE 🛑: isSliding =",player.movement.isSliding);
-    }else if(angleDeg === 0){
-        player.movement.isSliding = false;
-        player.movement.canMove = true; // TODO: this is bad, redo this later somehow
-        //if(gameSettings.debugMode)console.log("using default up direction for rotation ✅: angleDeg =",angleDeg);
+    }else if(angleDeg){
+        if(gameSettings.debugMode) console.log("ANGLE IS TOO LARGE (or negative): ",angleDeg);
+        if(gameSettings.debugMode) console.log("Setting rotation to default up direction & haulting player speed");
+        // Override final desiredRotation value
+        desiredRotation = BABYLON.Quaternion.FromEulerVector(vec.up); // Default to upward rotation
+        player.body.physicsImpostor.setLinearVelocity(vec3()); // Halt all player movement
     }
-    //console.log("canSprint?",player.movement.canSprint);
-    // Create a quaternion to align the player's body with the surface normal
-    const surfaceRotation = BABYLON.Quaternion.FromLookDirectionLH(BABYLON.Vector3.Cross(vec.right.scale(-1), surfaceNormal),surfaceNormal);
-    desiredRotation = surfaceRotation.multiply(BABYLON.Quaternion.FromEulerAngles(0, quantizedYAngle, 0));
-    // Apply calculated rotationQuaternion value for player.body
+
+    // Apply final calculated rotationQuaternion value for the player body
     player.body.rotationQuaternion = desiredRotation.normalize();
 
-    // Lock physics body rotation on X and Z axes by preserving the Y angular velocity
-    player.body.physicsImpostor.setAngularVelocity(utils.vec3(0, getCurVelo?.y || 0, 0));
+    // Disable physicsImpostor angular velocity entirely
+    player.body.physicsImpostor.setAngularVelocity(vec3());
     // Set player mesh skeleton position to prevent animations causing mesh position desync
     player.mesh.skeleton.bones[0].getTransformNode().setAbsolutePosition(player.mesh.position);
     // Adjust player.mesh position relative to player.body.position slightly
-    player.mesh.position = vec3(player.body.position.x, player.body.position.y - 0.2, player.body.position.z);
+    player.mesh.position = vec3(player.body.position.x, player.body.position.y - (0.2 * player.scale), player.body.position.z);
     // Adjust the player mesh's rotation to slerp between its current rotation and the desired rotation (physics.body.rotationQuaternion)
     player.mesh.rotationQuaternion = BABYLON.Quaternion.Slerp(player.mesh.rotationQuaternion,player.body.rotationQuaternion,gameSettings.defaultRotationSpeed);
 

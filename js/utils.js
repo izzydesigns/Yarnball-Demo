@@ -21,7 +21,7 @@ export let vec = {
 }
 /**
  * @desc Shorthand for `new BABYLON.Vector3(x,y,z)`, use `vec3(x,y,z)` instead for brevity
- * @desc Default values are `0,0,0`, so `BABYLON.Vector3.Zero()` can also be written as `vec3()`
+ * @desc Default values are `0,0,0`, so `vec3()` is equivalent to `BABYLON.Vector3.Zero()`
  */
 export function vec3(x=0,y=0,z=0){return new BABYLON.Vector3(x,y,z);}
 /**
@@ -55,12 +55,8 @@ export function resumeScene() {
  * @returns Returns the result of `scene.pickWithRay` on the desired `mesh` with the specified arguments
  * @see https://doc.babylonjs.com/typedoc/functions/BABYLON.PickWithRay Babylon API documentation.
  */
-export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = game.excludedFromCollisions){
-	const ray = new BABYLON.Ray(
-		mesh.position.clone(),// Center of player mesh
-		rayDirection,
-		rayLength
-	);
+export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = game.excludeFromRayResults){
+	let ray = new BABYLON.Ray(mesh.position.clone(),rayDirection,rayLength);
 	return scene.pickWithRay(ray, (mesh) => !excludedMeshes.includes(mesh)); // Return final hit result of ray
 }
 
@@ -69,23 +65,56 @@ export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = game.exc
 //==================//
 /**
  * @todo fill this out
+ * @param mesh
+ * @param includeDescendants
  */
-export function createShadowGenerator(light, mapSize = 1024, blurScale = 2, darkness = 0.5, blurBoxOffset = 1, exponentialShadowMap = true){
-	let shadowGenerator = new BABYLON.ShadowGenerator(mapSize, light);
-	shadowGenerator.useExponentialShadowMap = exponentialShadowMap; // For smooth shadows
-	shadowGenerator.darkness = darkness; // Shadow intensity
-	shadowGenerator.blurScale = blurScale; //default 2
-	shadowGenerator.blurBoxOffset = blurBoxOffset; //default 1, -1 to 1
-	return shadowGenerator;
+export function addMeshToShadowGens(mesh, includeDescendants=false){
+	if(!mesh || game.shadowGenerators.length === 0) return; // if mesh is undefined or no shadowGenerators exist, return
+	if(gameSettings.debugMode) console.log("Adding mesh '", mesh.name, "' to shadowGenerators: ", game.shadowGenerators);
+	for(let i in game.shadowGenerators) game.shadowGenerators[i].addShadowCaster(mesh, includeDescendants);
 }
 /**
  * @todo fill this out
- * @param mesh
  */
-export function addMeshToShadowGens(mesh){
-	for(let i in game.shadowGenerators){
-		game.shadowGenerators[i].addShadowCaster(mesh);
-	}
+export function createShadowGenerator(light, mapSize = 1024, darkness = 0.5, useBlurExpShadowMap = false, blurScale = 2, blurBoxOffset = 1, ) {
+	let shadowGenerator = new BABYLON.ShadowGenerator(mapSize, light);
+	shadowGenerator.useBlurExponentialShadowMap = useBlurExpShadowMap; // Enable blur exponential shadow map
+	shadowGenerator.usePoissonSampling = !useBlurExpShadowMap; // Alternative to exponential shadows
+	shadowGenerator.depthScale = 0.1;
+	shadowGenerator.darkness = darkness; // Set shadow intensity
+	shadowGenerator.blurScale = blurScale; // Set blur scaling
+	shadowGenerator.blurBoxOffset = blurBoxOffset; // Blur box offset
+	return shadowGenerator;
+}
+export function createPointLight(name, position=vec3(), intensity=1, color=newHexColor("#ffffff")){
+	const pointLight = new BABYLON.PointLight(name, position, scene);
+	pointLight.intensity = intensity;
+	pointLight.diffuse = color;
+	game.lights.push(pointLight);
+	return pointLight;
+}
+export function createDirectionalLight(name, angles=vec3(), position=vec3(), intensity=1, color=newHexColor("#ffffff")){
+	const directionalLight = new BABYLON.DirectionalLight(name, angles, scene);
+	directionalLight.position = position;
+	directionalLight.intensity = intensity;
+	directionalLight.diffuse = color;
+	game.lights.push(directionalLight);
+	return directionalLight;
+}
+export function createSpotLight(name, angles=vec3(), position=vec3(), angleRad=0, exponent=1, intensity=1, color=newHexColor("#ffffff")){
+	const spotLight = new BABYLON.SpotLight(name, position, angles, angleRad, exponent, scene);
+	spotLight.intensity = intensity;
+	spotLight.diffuse = color;
+	game.lights.push(spotLight);
+	return spotLight;
+}
+export function createHemisphereLight(name, angles=vec3(), position=vec3(), intensity=1, color=newHexColor("#ffffff")){
+	const hemiLight = new BABYLON.HemisphericLight(name, angles, scene);
+	hemiLight.position = position;
+	hemiLight.intensity = intensity;
+	hemiLight.diffuse = color;
+	game.lights.push(hemiLight);
+	return hemiLight;
 }
 
 //==================//
@@ -118,12 +147,12 @@ export function newHexColor(color = "#FF00FF") {
  * @param {BABYLON.Color3} emissiveCol - Desired emissiveCol color for matieral (optional)
  * @param {BABYLON.Color3} ambientCol - Desired ambientCol color for matieral (optional)
  */
-export function createMat(name, diffuseCol, specularCol = undefined, emissiveCol = undefined, ambientCol = undefined) {
+export function createMat(name, diffuseCol, specularCol = BABYLON.Color3.Black(), emissiveCol = BABYLON.Color3.Black(), ambientCol = BABYLON.Color3.Black()) {
 	let myMaterial = new BABYLON.StandardMaterial(name, scene);
 	myMaterial.diffuseColor = diffuseCol;
-	if (specularCol)myMaterial.specularColor = specularCol;
-	if (emissiveCol)myMaterial.emissiveColor = emissiveCol;
-	if (ambientCol)myMaterial.ambientColor = ambientCol;
+	myMaterial.specularColor = specularCol;
+	myMaterial.emissiveColor = emissiveCol;
+	myMaterial.ambientColor = ambientCol;
 	return myMaterial;
 }
 
@@ -171,8 +200,9 @@ export function generateBox(name, dimensions, position = vec3(0,0,0), material =
 	if(typeof material === "object"){
 		boxMesh.material = material;
 	}else{
-		if(material[0] !== "#")return;
-		boxMesh.material = createMat(name+"_mat", newHexColor(material));
+		let hexCol = material;
+		if(material[0] === "#") hexCol = hexCol.substring(1,hexCol.length);
+		boxMesh.material = createMat(name+"_mat", newHexColor("#"+hexCol));
 	}
 	boxMesh.physicsImpostor = new BABYLON.PhysicsImpostor(boxMesh, BABYLON.PhysicsImpostor.BoxImpostor, {mass: mass, friction: friction}, scene);
 	boxMesh.position = position;
@@ -195,7 +225,7 @@ export function generateBox(name, dimensions, position = vec3(0,0,0), material =
  * utils.generateRandomBoxes(10, undefined, [250,250,250], [[5,5], [10,100], [5,5]]);
  */
 export function generateRandomBoxes(amount, posOrigin = [0,0,0], posRange = [10,10,10], sizeRange = [[0,10],[0,10],[0,10]], mass = 0){
-	// Generate random platforms for testing player movement
+	// Generate random platforms for testing player movement, all parented to the `parentMesh`
 	const parentMesh = new BABYLON.Mesh("generateRandomBoxes", scene);
 	for(let i=0; i< amount; i++){
 		let randSizeX = sizeRange[0][0] + (Math.random() * (sizeRange[0][1]-sizeRange[0][0]));//
@@ -234,11 +264,9 @@ export function getPlayerDownDirection() {
 	BABYLON.Matrix.FromQuaternionToRef(rotationQuaternion, transformMatrix); // Fill it with quaternion data
 
 	// Transform the local down direction to world space using the matrix
-	//console.log("playerDownVec:", playerDownVec);
 	let result = BABYLON.Vector3.TransformNormal(vec.down, transformMatrix).normalize();
 	player.curDownVector = result;
 	return result;
-
 }
 /**
  * @todo update this
@@ -268,12 +296,14 @@ export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
 		plane.material.backFaceCulling = false;
 		plane.material.specularColor = new BABYLON.Color3(0, 0, 0);
 		plane.material.diffuseTexture = dynamicTexture;
+		plane.checkCollisions = false;
 		plane.parent = axisHelperMesh;
 		return plane;
 	};
 	const createAxis = (name, points, color, label, labelPos, labelColor) => {
 		let axis = BABYLON.MeshBuilder.CreateLines(name, {points}, scene);
 		axis.color = color;
+		axis.checkCollisions = false;
 		axis.parent = axisHelperMesh;
 		let char = makeTextPlane(label, labelColor, size / 10);
 		char.position = labelPos;
@@ -301,6 +331,7 @@ export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
 		vec3(0, 0.05 * size, size * 0.95)
 	], new BABYLON.Color3(0, 0, 1), "Z", vec3(0, 0.05 * size, 0.9 * size), "blue");
 	axisHelperMesh.position = offset;
+	axisHelperMesh.checkCollisions = false;
 }
 /**
  * @todo update this

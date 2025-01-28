@@ -50,8 +50,8 @@ export function initScreenElements () {
 
 // Handles which menu to display when `curMenu` value is changed
 export function updateMenus () {
-    // Updates game HUD values
-    updateScreenElements();
+    // Updates on-screen values based on which menu is being displayed
+    updateScreenElements(game.curMenu);
 
     // Handle updates to `game.curMenu` and switch to new screen
     if(game.curMenu !== game.prevMenu) {
@@ -63,60 +63,61 @@ export function updateMenus () {
 }
 
 // Handle dynamically updating values for UI elements (like the settings menu, ingame HUD data, etc)
-function updateScreenElements () {
-    if(game.curMenu === "ingame"){
-        let absoluteFPS = engine.getFps();
-        game.currentFPS = absoluteFPS;
-        let curPos = player.body.position;
-        //Update the ingame HUD elements
-        hud1ValElem.text(player.speed.toFixed(1)+" (Raw: "+player.absoluteSpeed.toFixed(2)+")");
-        hud2ValElem.text(player.onGround?"✔️":"✖️");
-        hud3ValElem.text(player.movement.isSliding?"✔️":"✖️");
-        hud5ValElem.text(player.tiltDegrees?.toFixed(1)+"/"+gameSettings.defaultMaxSlopeAngle);
-        hud4ValElem.text(absoluteFPS.toFixed(0));
-        hudXValElem.text(curPos.x.toFixed(1));hudYValElem.text(curPos.y.toFixed(1));hudZValElem.text(curPos.z.toFixed(1));
-        speedProgressBar.width((player.absoluteSpeed / gameSettings.defaultSprintSpeed) * 100+"%");
-        // TODO: Not working? idk why
-        /*let isSprinting = player.movement.sprinting && player.movement.canSprint;
-        speedProgressBar.attr("background",(isSprinting?"green":"blue")+"!important");*/
+function updateScreenElements (menu) {
+    switch (menu){
+        case "ingame":
+            let absoluteFPS = engine.getFps();
+            game.currentFPS = absoluteFPS;
+            let curPos = player.body.position;
+            //Update the ingame HUD elements
+            hud1ValElem.text(player.speed.toFixed(1) + " (Raw: " + player.horizontalSpeed.toFixed(2) + ")");
+            hud2ValElem.text(player.onGround ? "✔️" : "✖️");
+            hud3ValElem.text(player.movement.isSliding ? "✔️" : "✖️");
+            hud5ValElem.text(player.tiltDegrees?.toFixed(1) + "/" + gameSettings.defaultMaxSlopeAngle);
+            hud4ValElem.text(absoluteFPS.toFixed(0));
+            hudXValElem.text(curPos.x.toFixed(1));
+            hudYValElem.text(curPos.y.toFixed(1));
+            hudZValElem.text(curPos.z.toFixed(1));
+            speedProgressBar.width((player.horizontalSpeed / gameSettings.defaultSprintSpeed) * 100 + "%");
+            // TODO: Not working? idk why
+            /*let isSprinting = player.movement.sprinting && player.movement.canSprint;
+            speedProgressBar.attr("background",(isSprinting?"green":"blue")+"!important");*/
 
-        // TODO: Update FPS color based on performance
-        /*
-        switch(absoluteFPS){
-            case absoluteFPS >= highFPS[0]:
-                hudFpsValElem.attr("color",highFPS[1]+"!important");
-                return;
-            case absoluteFPS >= medFPS[0]:
-                hudFpsValElem.attr("color",medFPS[1]+"!important");
-                return;
-            case absoluteFPS >= lowFPS[0]:
-                hudFpsValElem.attr("color",lowFPS[1]+"!important");
-                return;
-        }*/
-    }
-    if(game.curMenu === "settings"){
-        // Constantly updates the debugLabel status to reflect the current `debugMode` state
-        settings_debugLabel.text(gameSettings.debugMode?"✅":"❌");
-        // Set whether or not specified elements are enabled/disabled according to game.debugMode
-        if(!gameSettings.debugMode){
-            if(!settings_applyWalkBtn.attr("disabled")) {
-                settings_applyWalkBtn.attr("disabled", "disabled");
-                settings_applySprintBtn.attr("disabled", "disabled");
-                settings_applyJumpBtn.attr("disabled", "disabled");
+            // TODO: Update FPS color based on performance (also not working???)
+            /*if(absoluteFPS >= highFPS[0]) {
+                hud4ValElem.attr("color", highFPS[1] + "!important");
+            }else if(absoluteFPS >= medFPS[0]) {
+                hud4ValElem.attr("color", medFPS[1] + "!important");
+            }else if(absoluteFPS >= lowFPS[0]){
+                hud4ValElem.attr("color",lowFPS[1]+"!important");
+            }*/
+            break;
+        case "settings":
+            // Constantly updates the debugLabel status to reflect the current `debugMode` state
+            settings_debugLabel.text(gameSettings.debugMode ? "✅" : "❌");
+            // Set whether or not specified elements are enabled/disabled according to game.debugMode
+            if (!gameSettings.debugMode) {
+                if (!settings_applyWalkBtn.attr("disabled")) {
+                    settings_applyWalkBtn.attr("disabled", "disabled");
+                    settings_applySprintBtn.attr("disabled", "disabled");
+                    settings_applyJumpBtn.attr("disabled", "disabled");
+                }
+                if (!settings_walkInput.attr("disabled")) {
+                    settings_walkInput.attr("disabled", "disabled");
+                    settings_sprintInput.attr("disabled", "disabled");
+                    settings_jumpInput.attr("disabled", "disabled");
+                }
+            } else if (gameSettings.debugMode) {
+                settings_applyWalkBtn.removeAttr("disabled");
+                settings_applySprintBtn.removeAttr("disabled");
+                settings_applyJumpBtn.removeAttr("disabled");
+                settings_walkInput.removeAttr("disabled");
+                settings_sprintInput.removeAttr("disabled");
+                settings_jumpInput.removeAttr("disabled");
             }
-            if(!settings_walkInput.attr("disabled")){
-                settings_walkInput.attr("disabled", "disabled");
-                settings_sprintInput.attr("disabled", "disabled");
-                settings_jumpInput.attr("disabled", "disabled");
-            }
-        }else if(gameSettings.debugMode){
-            settings_applyWalkBtn.removeAttr("disabled");
-            settings_applySprintBtn.removeAttr("disabled");
-            settings_applyJumpBtn.removeAttr("disabled");
-            settings_walkInput.removeAttr("disabled");
-            settings_sprintInput.removeAttr("disabled");
-            settings_jumpInput.removeAttr("disabled");
-        }
+            break;
+        default:
+            return;
     }
 }
 
@@ -170,14 +171,14 @@ settings_applyWalkBtn.click(() => {
     let newWalkSpeed = Number(settings_walkInput.val());
     gameSettings.defaultMoveSpeed = newWalkSpeed;
     player.curMovementSpeed = Number(newWalkSpeed);
-    console.log("Setting walk absoluteSpeed to '"+newWalkSpeed+"' (previously '"+prevWalkSpeed+"')");
+    console.log("Setting walk speed to '"+newWalkSpeed+"' (previously '"+prevWalkSpeed+"')");
 });
 settings_applySprintBtn.click(() => {
     let prevSprintSpeed = gameSettings.defaultSprintSpeed;
     let newSprintSpeed = Number(settings_sprintInput.val());
     gameSettings.defaultSprintSpeed = newSprintSpeed;
     player.sprintSpeed = newSprintSpeed;
-    console.log("Setting walk absoluteSpeed to '"+newSprintSpeed+"' (previously '"+prevSprintSpeed+"')");
+    console.log("Setting sprint speed to '"+newSprintSpeed+"' (previously '"+prevSprintSpeed+"')");
 });
 settings_applyJumpBtn.click(() => {
     let prevJumpHeight = gameSettings.defaultJumpHeight;

@@ -11,9 +11,9 @@ export function initKeyboardListeners() {
     let debugLayer = scene.debugLayer;
     const input = gameSettings.controls;
     window.addEventListener("keydown", function (key) {
-        //key.preventDefault(); // Possibly useful for future applications, it can help prevent Tab from tabbing out of the game
+        if (document.pointerLockElement)key.preventDefault(); // Prevents browser keys like tab and alt from triggering while ingame
         if (key.repeat) return; // Don't allow repeat keypress via holding key down
-        console.log(key.code);
+        if(gameSettings.debugMode) console.log(key.code);
         if (key.code === input.forward || key.code === input.back || key.code === input.left || key.code === input.right) {
             player.movement.isMoving = true; // Sets isMoving to true if player is pressing any directional keys
         }
@@ -23,8 +23,9 @@ export function initKeyboardListeners() {
         if (key.code === input.right) {player.movement.right = true;}
         if (key.code === input.jump && !player.movement.readyJump && !player.movement.isSliding) {player.movement.readyJump = true;}
         if (key.code === input.sprint && player.movement.canSprint) {player.movement.sprinting = true;}
+        if (key.code === input.walk) {player.movement.walking = true;}
         if (key.code === "NumpadAdd") {
-            utils.teleportPlayer(vec3(0,30,0));
+            utils.teleportPlayer(vec3(0,15,0));
             utils.deleteMeshesByName("generateRandomBoxes");
             utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]],5);
             utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]]);
@@ -34,7 +35,7 @@ export function initKeyboardListeners() {
         }
     });
     window.addEventListener("keyup", function (key) {
-        //key.preventDefault(); // Potentially useful for future applications
+        if (document.pointerLockElement)key.preventDefault(); // Prevents browser keys like tab and alt from triggering while ingame
         if (key.code === input.jump || key.code === input.forward || key.code === input.back || key.code === input.left || key.code === input.right) {
             if (key.code === input.forward) {player.movement.forward = false;}
             if (key.code === input.back) {player.movement.back = false;}
@@ -48,6 +49,7 @@ export function initKeyboardListeners() {
                 player.movement.isMoving = false;
             }
         }
+        if (key.code === input.walk) {player.movement.walking = false;}
         if (key.code === input.sprint && player.movement.sprinting) {player.movement.sprinting = false;}
         if (key.code === gameSettings.controls.developerMenu) {// Tab key to toggle debug mode
             if (!scene.debugLayer.isVisible()) {
@@ -102,6 +104,8 @@ export function initWindowFunctions() {
         }
     });
 
+    // Prevents user from opening context menu via right clicking
+    document.addEventListener('contextmenu', (event) => {event.preventDefault()});
     // Handle cursor locking
     canvas.addEventListener("click", () => {canvas.requestPointerLock();});
     // Check pointerlock, if triggered, set curMenu to paused (desktop only, mobile support will need a dif approach?)

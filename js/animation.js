@@ -1,8 +1,8 @@
 import {player, scene, gameSettings, game} from "./main.js";
+import * as movement from "./movement.js";
 
 /**
- * @description Object containing raw `animationGroup` names, multiple animation names provided to specify which animations have a follow-up animation that must be played upon completion
- * @type {{crawl: string[], crouchToStand: string[], gallop: string[], idleCrouch: string[], jumpHighIdle: string[], idleLaying: string[], idleSit: string[], idleSitClean: string[], idleSleep: string[], idleStand: string[], idleStandClean: string[], jump: string[], jumpHigh: string[], pull: string[], push: string[], sitToStand: string[], standToCrouch: string[], standToGallop: string[], standToJumpHighIdle: string[], standToSit: string[], standToTrot: string[], standToWalk: string[], turnLeft180: string[], turnLeft45: string[], turnLeft90: string[], turnRight180: string[], turnRight45: string[], turnRight90: string[], attack: string[], trot: string[], walk: string[], walkToStand: string[], walkToTrot: string[]}}
+ * @description Object containing raw `animationGroup` names, multiple animation names provided specify which animations have a follow-up animation that must be played upon completion
  */
 export const animationData = {
     // Player animation list: [animationGroup.name, nextAnimation?]
@@ -63,9 +63,8 @@ export function initAnimations() {
  */
 function getAnimationState() {
     // Handle jumping/falling animations
-    if(player.movement.jumping){
+    if(player.movement.jumping && player.onGround && !movement.jumpedTooRecently){
         if(gameSettings.debugMode) console.log("Player jumped!");
-        // TODO: Fix code (not playing???)
         return animationData.jump;
     }else if(!player.onGround){
         if(gameSettings.debugMode) console.log("Player is falling!");
@@ -75,28 +74,32 @@ function getAnimationState() {
 
     // Handle player.speed changing which animations to use while onGround
     // Update 1/22/25 - Changed values for walk trot and gallop to fixed values since player movement values will vary
+    // Update 1/27/25 - Applying player.scale to arbitrarily assigned values to maintain consistency with player scaling
     switch (player.onGround) {
-        case player.movement.readyJump && player.onGround && player.speed <= 0.5:
+        /* Requires PROPER implementation before being usable
+        case player.movement.readyJump && player.movement.canJump && !player.movement.isMoving && !movement.jumpedTooRecently:
             if(gameSettings.debugMode) console.log("Player ready to jump");
-            return animationData.standToJumpHighIdle;
+            return animationData.standToJumpHighIdle;*/
         case player.speed > 0 && !player.movement.isMoving && player.curAnimation !== animationData.idleStand:
             if(gameSettings.debugMode) console.log("Player stopped moving");
             return animationData.walkToStand;
         case player.movement.isSliding:
-            if(gameSettings.debugMode) console.log("Player on steep surface");
+            if(gameSettings.debugMode) console.log("Player is sliding on steep surface");
             return animationData.walk;
-        case player.speed <= 1 && player.speed > 0.5:
+        case player.speed < (0.99 * player.scale) && player.speed > 0:
             if(gameSettings.debugMode) console.log("Player walking");
             return animationData.walk;
-        case player.speed > 1 && player.speed < 2.25:
+        case player.speed >= (0.99 * player.scale) && player.speed < (2.25 * player.scale):
             if(gameSettings.debugMode) console.log("Player trotting");
             return animationData.trot;
-        case player.speed >= 2.25:
+        case player.speed >= (2.25 * player.scale):
             if(gameSettings.debugMode) console.log("Player sprinting");
             return animationData.gallop;
         case player.speed === 0:
             // If nothing else has returned by now and player.speed = 0, we must be idling...
-            //if(gameSettings.debugMode) console.log("Player idling");
+            return animationData.idleStand;
+        default:
+            // If none of the above conditions are met somehow... return `idleStand`
             return animationData.idleStand;
     }
 }
