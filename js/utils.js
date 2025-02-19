@@ -1,4 +1,4 @@
-import {engine, game, gameSettings, player, scene} from "./main.js";
+import {canvas, engine, game, gameSettings, player, scene} from "./main.js";
 
 //===================================//
 // SCENE HELPERS/SHORTHAND VARIABLES //
@@ -59,6 +59,34 @@ export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = game.exc
 	let ray = new BABYLON.Ray(mesh.position.clone(),rayDirection,rayLength);
 	return scene.pickWithRay(ray, (mesh) => !excludedMeshes.includes(mesh)); // Return final hit result of ray
 }
+/** @todo update this */
+export function createSkybox(rootUrl, size=1024) {
+	const skybox = BABYLON.MeshBuilder.CreateBox("skybox", {size:size}, scene);
+	const skyboxMaterial = new BABYLON.StandardMaterial("skybox", scene);
+	skyboxMaterial.backFaceCulling = false;
+	skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture(rootUrl, scene);
+	skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+	skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+	skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+	skybox.material = skyboxMaterial;
+}
+/** @todo update this */
+export function initPlayerCamera() {
+	player.camera = new BABYLON.ArcRotateCamera(
+		"camera",
+		Math.PI / 2, // Alpha (horizontal rotation)
+		Math.PI / 3, // Beta (vertical rotation)
+		gameSettings.defaultCameraDistance, // Radius (distance from the target)
+		undefined, // Target (initialized later)
+		scene
+	);
+	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
+	player.camera.wheelPrecision = 150; // How much each scrollwheel scroll zooms the camera in/out
+	player.camera.lowerRadiusLimit = 0.1; // How close can the camera come to player
+	player.camera.upperRadiusLimit = 10; // How far can the camera go from the player
+	player.camera.minZ = 0.001; // Distance before camera starts to hide surfaces that are too close
+	//player.camera.checkCollisions = true; // Moves camera closer if being obscured by geometry
+}
 
 //==================//
 // LIGHTING HELPERS //
@@ -115,6 +143,23 @@ export function createHemisphereLight(name, angles=vec3(), position=vec3(), inte
 	hemiLight.diffuse = color;
 	game.lights.push(hemiLight);
 	return hemiLight;
+}
+export function initDefaultLighting(){
+	// Create main light source (sun)
+	let sunLight = createDirectionalLight("sun", vec3(-1.5, -1.5, -Math.PI/2), vec3(20, 50, 20));
+	sunLight.intensity = 0.9;
+	sunLight.shadowMaxZ = 1000; // Necessary
+	// Create & set ambient lighting with tiny intensity level (just so shadowed areas aren't 100% black)
+	let ambientLight = createHemisphereLight("ambient");
+	ambientLight.intensity = 0.025;
+	// Create & init shadowGenerator for our single directional light (sunLight)
+	let sunLightShadow = new BABYLON.ShadowGenerator(1024 * 4, sunLight);
+	sunLightShadow.useContactHardeningShadow = true;
+	sunLightShadow.darkness = 0.25; // Lower value = darker shadows (counter-intuitive)
+	// Adjust biases to reduce shadow artifacts (light bleeding or acne)
+	sunLightShadow.bias = 0.0002;
+	sunLightShadow.normalBias = 0.0001;
+	game.shadowGenerators.push(sunLightShadow);
 }
 
 //==================//
@@ -239,9 +284,7 @@ export function generateRandomBoxes(amount, posOrigin = [0,0,0], posRange = [10,
 		randBox.parent = parentMesh;
 	}
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function deleteMeshesByName(nameToDelete) {
 	const meshesToDelete = scene.meshes.filter(mesh => mesh.name === nameToDelete);
 	meshesToDelete.forEach(mesh => {
@@ -252,9 +295,7 @@ export function deleteMeshesByName(nameToDelete) {
 		mesh.dispose();// Dispose of the parent mesh itself
 	});
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function getPlayerDownDirection() {
 	// Ensure the player's rotation quaternion exists
 	let rotationQuaternion = player.body.rotationQuaternion || BABYLON.Quaternion.Identity();
@@ -268,12 +309,21 @@ export function getPlayerDownDirection() {
 	player.curDownVector = result;
 	return result;
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function checkCanJump(rayLength){
 	let playerDownDirection = getPlayerDownDirection();
 	return rayCast(player.body, playerDownDirection, rayLength);
+}
+/** @todo update this */
+export function createMeshEvent(collisionMesh, onEnterOrExit, detectMesh, desiredFunc){
+	const onExit = (onEnterOrExit==="exit"||onEnterOrExit==="onExit"); // Specify `onExit` conditions so everything else defaults to `onEnter`
+	let newAction = new BABYLON.ExecuteCodeAction({
+		trigger: onExit?13:12, // `ActionManager.OnIntersectionEnterTrigger` & `ExitTrigger` = 12 & 13 respectively
+		parameter: {mesh: detectMesh,usePreciseIntersection: true}
+	},desiredFunc);
+	collisionMesh.actionManager = new BABYLON.ActionManager(scene);
+	collisionMesh.actionManager.registerAction(newAction);
+	//return collisionMesh.actionManager; // Return the actionManager object (optional/unnecessary?)
 }
 
 //===============//
@@ -333,9 +383,7 @@ export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
 	axisHelperMesh.position = offset;
 	axisHelperMesh.checkCollisions = false;
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
 	// Perform the raycast to detect the mesh below the player
 
@@ -364,9 +412,7 @@ export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
 	}
 	return vec.up; // No hit detected, return absolute up vector
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function clampVector3ToMaxLength(vector, maxLength) {
 	const length = vector.length(); // Get the magnitude of the vector
 	if (length > maxLength) {
@@ -374,15 +420,11 @@ export function clampVector3ToMaxLength(vector, maxLength) {
 	}
 	return vector; // Return as-is if it's already within the limit
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function getVecDifInDegrees(vec1, vec2){
 	return BABYLON.Tools.ToDegrees(Math.acos(BABYLON.Vector3.Dot(vec1.normalize(), vec2.normalize())))
 }
-/**
- * @todo update this
- */
+/** @todo update this */
 export function getHorizontalSpeedFromVec(moveVector) {return Math.sqrt(moveVector.x ** 2 + moveVector.z ** 2);}
 /**
  * @todo UNTESTED FUNCTION, also update this
@@ -440,7 +482,7 @@ export function createTrajectoryLines(mesh) {
 }
 
 /**
- * JSDoc parameter usage (w/ example function)
+ * JSDoc parameter usage example
  *
  * @description Takes `size` of rectangle and returns the calculated area as a `string`.
  * @param {object} size - The width of the rectangle.

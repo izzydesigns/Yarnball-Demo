@@ -97,8 +97,8 @@ export function handleMovement () {
         }
     }
 
+    // Apply simulated friction if player's horizontalSpeed is greater than zero & player is onGround
     if(!player.movement.isMoving){
-        // Apply simulated friction if player's horizontalSpeed is greater than zero & player is onGround
         if((player.horizontalSpeed > 0 && player.onGround) && !player.movement.isSliding){
             if(gameSettings.debugMode) console.log("Simulating friction!", player.horizontalSpeed);
             let oldYVelo = curLinearVelo.y;
@@ -123,14 +123,13 @@ export function handleMovement () {
     // FINALLY, as the last step, apply the finalVelocity to our player.body.physicsImpostor
     player.body.physicsImpostor.setLinearVelocity(finalVelocity);
 
-    // Update player `curMovementSpeed`, `movementDirection`, and `horizontalSpeed` values with final calculated values
-    player.curMovementSpeed = Number(player.curMovementSpeed.toFixed(3)); // Fix rounding errors
+    // Update player `curMovementSpeed`, `movementDirection`, `horizontalSpeed`, and `speed` values with final calculated values
+    //player.curMovementSpeed = Number(player.curMovementSpeed.toFixed(3)); // No longer used
     player.movementDirection = desiredMovement;
     let tempSpeed = player.body.physicsImpostor.getLinearVelocity().scale(0.99);
 
     player.speed = Number(tempSpeed.length().toFixed(2)); // Fix rounding errors
     player.horizontalSpeed = new BABYLON.Vector3(tempSpeed.x, 0, tempSpeed.z).length(); // Calculate and store the horizontalSpeed
-    if(gameSettings.debugMode) console.log(player.speed, player.horizontalSpeed);
 }
 
 let desiredRotation = quat(0,0,0,0);
@@ -154,27 +153,18 @@ export function handleRotationAndPosition() {
     const angleBetween = Math.acos(BABYLON.Vector3.Dot(surfaceNormal?.normalize(), vec.up));
     const angleDeg = BABYLON.Tools.ToDegrees(angleBetween);
     player.tiltDegrees = angleDeg;
-    if(angleDeg <= gameSettings.defaultMaxSlopeAngle && angleDeg >= 0){
-        if(gameSettings.debugMode) console.log("ANGLE IS SLIGHTLY SLOPED: ",angleDeg);
-        if(gameSettings.debugMode) console.log("Setting canMove to true, sliding to false, and if on ground, canSprint to true");
-        player.movement.isSliding = false;
-        player.movement.canMove = true;
+    if(angleDeg === 0){
+        if(player.movement.isSliding)player.movement.isSliding = false;
+        if(!player.movement.canMove)player.movement.canMove = true;
         if(player.onGround)player.movement.canSprint = true;
-        //if(gameSettings.debugMode)console.log("using surface normal for desiredrotation ⚠️: angleDeg =",angleDeg);
+    }else if(angleDeg <= gameSettings.defaultMaxSlopeAngle && angleDeg > 0){
+        if(player.movement.isSliding)player.movement.isSliding = false;
+        if(!player.movement.canMove)player.movement.canMove = true;
+        if(player.onGround)player.movement.canSprint = true;
     }else if(angleDeg > gameSettings.defaultMaxSlopeAngle && angleDeg < 90) {
-        player.movement.isSliding = true;
+        if(!player.movement.isSliding)player.movement.isSliding = true;
         player.movement.canMove = player.movement.canSprint = player.movement.isMoving = false;
-        // Override final desiredRotation value
-        desiredRotation = BABYLON.Quaternion.FromEulerVector(vec.up); // Default to upward rotation
-        if(gameSettings.debugMode) console.log("ANGLE IS SLOPED (but less than 90): ",angleDeg);
-        if(gameSettings.debugMode) console.log("Setting rotation to default up direction");
-        //if(gameSettings.debugMode)console.log("ON STEEP SURFACE 🛑: isSliding =",player.movement.isSliding);
-    }else if(angleDeg){
-        if(gameSettings.debugMode) console.log("ANGLE IS TOO LARGE (or negative): ",angleDeg);
-        if(gameSettings.debugMode) console.log("Setting rotation to default up direction & haulting player speed");
-        // Override final desiredRotation value
-        desiredRotation = BABYLON.Quaternion.FromEulerVector(vec.up); // Default to upward rotation
-        player.body.physicsImpostor.setLinearVelocity(vec3()); // Halt all player movement
+        desiredRotation = BABYLON.Quaternion.FromEulerVector(vec.up); // Override final desiredRotation to equal `vec.up`
     }
 
     // Apply final calculated rotationQuaternion value for the player body
@@ -189,5 +179,4 @@ export function handleRotationAndPosition() {
     // Adjust the player mesh's rotation to slerp between its current rotation and the desired rotation (physics.body.rotationQuaternion)
     player.mesh.rotationQuaternion = BABYLON.Quaternion.Slerp(player.mesh.rotationQuaternion,player.body.rotationQuaternion,gameSettings.defaultRotationSpeed);
 
-    //utils.createTrajectoryLines(player.body);
 }

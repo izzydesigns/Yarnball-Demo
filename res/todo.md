@@ -70,7 +70,9 @@ KNOWN BUGS:
    - FIX #1: Change how the custom friction method works & check if we're in the air due to a player jump or because we're falling
    - FIX #2: Determine proper place for jump calculation code to go in the chain of `finalVelo` assignments
 2. Standing on slanted surfaces greater than the allowed slope limit causes strange speed boosts
-   - FIX: Change final applied finalVelocity value to be relative to the player's up direction (or get player down.scale(-1))
+   - FIX #1: Just properly raycast below the player (include rotation) when assigning `onGround`
+   - FIX #2: Add new raycast positioned at player's front feet for checking slopes instead of player body's center position
+   - FIX #3: Change final applied finalVelocity value to be relative to the player's up direction (or get player down.scale(-1))
 3. Animation for jumping is bugged (plays as expected, but if in the air too long the animation ends by landing on a surface mid-air)
    - FIX: Add system to specify an animation pause at the apex of the jump, and resume when falling, ending when ground is finally touched again
 4. The speedometer progress bar on the HUD has a width easing effect on it that I can't seem to change to `linear` despite trying for a bit
