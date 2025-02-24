@@ -1,8 +1,8 @@
-import {game, gameSettings, player} from "./main.js";
+import {game, gameSettings, player} from "./globals.js";
+import {quat, vec, vec3} from "./utils.js";
 import * as utils from "./utils.js";
-import {clampVector3ToMaxLength, quat, vec, vec3} from "./utils.js";
 
-let desiredMovement = vec3(), moveDelayDelta = 0, lastJumpTime = 0;
+let desiredMovement = vec3(),  desiredRotation = quat(0,0,0,0), moveDelayDelta = 0, lastJumpTime = 0;
 export let jumpedTooRecently = false;
 /**
  * @desc Handles the player movement and applies forces to the `player.body` based on desired direction.
@@ -16,11 +16,9 @@ export function handleMovement () {
     // Initialize jump delay timer
     //if(lastJumpTime===0)lastJumpTime=game.time - gameSettings.defaultJumpDelay;
     // Check & sets canMove, canJump and onGround = true if rayCast below player = true (is colliding below)
-    let onGroundCheck = utils.checkCanJump((0.2 + gameSettings.jumpDetectionBuffer) * player.scale /* Half player height + buffer for slopes */);
+    let onGroundCheck = utils.checkCanJump((0.2 + gameSettings.jumpDetectionBuffer) * player.scale);
     // Set onGround, canJump, and canSprint to true if the onGroundCheck.hit returns a value
-    player.onGround = player.movement.canJump = player.colliding = onGroundCheck.hit;
-    player.curLookDirection = player.camera.getDirection(player.body.position);
-    player.prevSpeed = player.speed; // Update player.prevSpeed before horizontalSpeed gets updated
+    player.onGround = player.movement.canJump = onGroundCheck.hit;
 
     // Handles jump force calculation & sets movement.jumping back to false any time it's set to true
     let addJumpForce = false;
@@ -39,17 +37,17 @@ export function handleMovement () {
         // Update lastMoveTime to game.time value
         player.lastMoveTime = game.time;
 
-        if (player.movement.right) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward), player.maxVelocity);
-        if (player.movement.left) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camForward.scale(-1)), player.maxVelocity);
-        if (player.movement.back) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight.scale(-1)), player.maxVelocity);
-        if (player.movement.forward) desiredMovement = clampVector3ToMaxLength(desiredMovement.addInPlace(camRight), player.maxVelocity);
+        if (player.movement.right) desiredMovement = utils.clampVector3ToMaxLength(desiredMovement.addInPlace(camForward), player.maxVelocity);
+        if (player.movement.left) desiredMovement = utils.clampVector3ToMaxLength(desiredMovement.addInPlace(camForward.scale(-1)), player.maxVelocity);
+        if (player.movement.back) desiredMovement = utils.clampVector3ToMaxLength(desiredMovement.addInPlace(camRight.scale(-1)), player.maxVelocity);
+        if (player.movement.forward) desiredMovement = utils.clampVector3ToMaxLength(desiredMovement.addInPlace(camRight), player.maxVelocity);
 
 
         // Caps horizontal movement to the player.curMovementSpeed value (preserving y-axis forces)
         if (!desiredMovement.equals(vec3())) {
             // Set desired Y movement by saving previous desiredMovement value & scale it by the jumpForce
             let jumpForce = player.jumpHeight + gameSettings.defaultMinJumpHeight + (player.horizontalSpeed);
-            let desiredJumpY = clampVector3ToMaxLength(desiredMovement.normalize().scaleInPlace(jumpForce), player.maxVelocity).y;
+            let desiredJumpY = utils.clampVector3ToMaxLength(desiredMovement.normalize().scaleInPlace(jumpForce), player.maxVelocity).y;
             desiredMovement.normalize().scaleInPlace(player.curMovementSpeed);
             // If we are adding jump force this frame... use preserved Y value
             desiredMovement.y = (addJumpForce) ? desiredJumpY : curLinearVelo.y;// Restore y-axis if jumping
@@ -58,7 +56,7 @@ export function handleMovement () {
         // Gradual force scaling (and delay) before force gets applied to player
         moveDelayDelta = Number(moveDelayDelta.toFixed(3)); // Remove floating point precision errors
         let velocityDeltaScaled = vec3(desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).x, desiredMovement.y, desiredMovement.scale(moveDelayDelta>0?moveDelayDelta:0).z);
-        lerpedVelo = (moveDelayDelta > 0 ? velocityDeltaScaled : clampVector3ToMaxLength(curLinearVelo, player.maxVelocity));
+        lerpedVelo = (moveDelayDelta > 0 ? velocityDeltaScaled : utils.clampVector3ToMaxLength(curLinearVelo, player.maxVelocity));
         if(moveDelayDelta < 1)moveDelayDelta += gameSettings.defaultMoveAccelerate;
 
         // Quantize direction of lerpedVelo to 45-degree increments
@@ -80,7 +78,7 @@ export function handleMovement () {
             //finalVelocity = finalVelocity.normalize();//.scale(gameSettings.defaultMoveSpeed);
             player.movement.canSprint = false;
             player.movement.canJump = false;
-            //if (gameSettings.debugMode) console.log("SCALING VELOCITY TO ", finalVelocity.length().toFixed(2), " BASED ON CURRENT SLOPE", player.tiltDegrees);
+            if(player.movement.sprinting) player.movement.sprinting = false;
         } else {
             // Handle sprinting (updating curMovementSpeed value, used to scale finalVelocity value)
             if(player.movement.walking) {
@@ -117,7 +115,7 @@ export function handleMovement () {
     }
 
     // Limit velocity to player.maxVelocity value
-    if(finalVelocity.length() > player.maxVelocity) finalVelocity = clampVector3ToMaxLength(curLinearVelo, player.maxVelocity);
+    if(finalVelocity.length() > player.maxVelocity) finalVelocity = utils.clampVector3ToMaxLength(curLinearVelo, player.maxVelocity);
     //console.log(finalVelocity.length(), clampVector3ToMaxLength(curLinearVelo, player.maxVelocity).length());
 
     // FINALLY, as the last step, apply the finalVelocity to our player.body.physicsImpostor
@@ -131,8 +129,6 @@ export function handleMovement () {
     player.speed = Number(tempSpeed.length().toFixed(2)); // Fix rounding errors
     player.horizontalSpeed = new BABYLON.Vector3(tempSpeed.x, 0, tempSpeed.z).length(); // Calculate and store the horizontalSpeed
 }
-
-let desiredRotation = quat(0,0,0,0);
 /**
  * @desc Handles the `player.body` rotation and locks `player.body` rotation to 45 degree increments.
  * @desc Also updates the `player.mesh` rotation & position based on `player.body` rotation/position values

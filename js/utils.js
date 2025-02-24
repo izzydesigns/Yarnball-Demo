@@ -1,4 +1,4 @@
-import {canvas, engine, game, gameSettings, player, scene} from "./main.js";
+import {canvas, engine, game, gameSettings, player, scene} from "./globals.js";
 
 //===================================//
 // SCENE HELPERS/SHORTHAND VARIABLES //
@@ -25,11 +25,12 @@ export let vec = {
  */
 export function vec3(x=0,y=0,z=0){return new BABYLON.Vector3(x,y,z);}
 /**
- * @todo update this
+ * @desc Shorthand for `new BABYLON.Quaternion(x,y,z,w)`, use `quat(x,y,z,w)` instead for brevity
+ * @desc Default values are `0,0,0,0`, so `quat()` is equivalent to `BABYLON.Quaternion.Zero()`
  */
 export function quat(x=0,y=0,z=0,w=0){return new BABYLON.Quaternion(x,y,z,w);}
 /**
- * @description Pauses the game using `engine.stopRenderLoop()`, and sets `scene.animationsEnabled` to `false` to pause animations.
+ * @desc Pauses the game using `engine.stopRenderLoop()`, and sets `scene.animationsEnabled` to `false` to pause animations.
  * @see https://doc.babylonjs.com/typedoc/classes/BABYLON.Engine#stoprenderloop Babylon API documentation.
  */
 export function pauseScene() {
@@ -38,16 +39,18 @@ export function pauseScene() {
 	if(gameSettings.debugMode) console.log("Window/tab has been minimized, scene should pause...");
 }
 /**
- * @description Resumes the game using `engine.runRenderLoop(() => scene.render());`, and sets `scene.animationsEnabled` to `true` to resume animations.
+ * @desc Resumes the game using `engine.runRenderLoop(() => scene.render());`, and sets `scene.animationsEnabled` to `true` to resume animations.
  * @see https://doc.babylonjs.com/typedoc/classes/BABYLON.Engine#runrenderloop Babylon API documentation.
  */
 export function resumeScene() {
+	if(!game.paused) return;
 	engine.runRenderLoop(() => scene.render()); // Resume rendering
 	scene.animationsEnabled = true; // Resumes scene animations
 	if(gameSettings.debugMode) console.log("Window/tab is visible again! Resume the scene.");
 }
+let excludedMeshesFromRaycast = [];
 /**
- * @description Raycasting helper function, specify a `mesh`, `rayDirection`, and `rayLength`, while optionally specifying more `excludedMeshes` to ignore during raycast.
+ * @desc Raycasting helper function, specify a `mesh`, `rayDirection`, and `rayLength`, while optionally specifying more `excludedMeshes` to ignore during raycast.
  * @param {BABYLON.Mesh} mesh Which mesh to raycast from (mesh's origin is used for ray origin)
  * @param {BABYLON.Vector3} rayDirection Which direction to raycast from
  * @param {number} rayLength How far (in scene units) to cast ray
@@ -55,11 +58,20 @@ export function resumeScene() {
  * @returns Returns the result of `scene.pickWithRay` on the desired `mesh` with the specified arguments
  * @see https://doc.babylonjs.com/typedoc/functions/BABYLON.PickWithRay Babylon API documentation.
  */
-export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = game.excludeFromRayResults){
-	let ray = new BABYLON.Ray(mesh.position.clone(),rayDirection,rayLength);
-	return scene.pickWithRay(ray, (mesh) => !excludedMeshes.includes(mesh)); // Return final hit result of ray
+export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = undefined){
+	let rayCastPos = mesh.position.clone(); // TODO: Change this to coorespond to the player's front paws instead, see github issue #3
+	let ray = new BABYLON.Ray(rayCastPos,rayDirection,rayLength);
+	if(excludedMeshesFromRaycast.length === 0){
+		// If excludedMeshesFromRaycast is empty, initialize it when rayCast is first used
+		excludedMeshesFromRaycast.push(
+			scene.getMeshByName(player.mesh.getChildren()[0].getChildren()[2].name), // `player.mesh` mesh name (named `playerMesh`)
+			scene.getMeshByName(player.body.name), // `player.body.name` (named `playerBody`)
+			scene.getMeshByName(player.mesh.getChildren()[1].name), // Mesh that the camera targets (named `camOffset`)
+		);
+	}
+	return scene.pickWithRay(ray, (mesh) => !excludedMeshesFromRaycast.includes(mesh)); // Return final hit result of ray
 }
-/** @todo update this */
+/** @desc update this */
 export function createSkybox(rootUrl, size=1024) {
 	const skybox = BABYLON.MeshBuilder.CreateBox("skybox", {size:size}, scene);
 	const skyboxMaterial = new BABYLON.StandardMaterial("skybox", scene);
@@ -70,7 +82,7 @@ export function createSkybox(rootUrl, size=1024) {
 	skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
 	skybox.material = skyboxMaterial;
 }
-/** @todo update this */
+/** @desc update this */
 export function initPlayerCamera() {
 	player.camera = new BABYLON.ArcRotateCamera(
 		"camera",
@@ -82,29 +94,35 @@ export function initPlayerCamera() {
 	);
 	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
 	player.camera.wheelPrecision = 150; // How much each scrollwheel scroll zooms the camera in/out
-	player.camera.lowerRadiusLimit = 0.1; // How close can the camera come to player
+	player.camera.lowerRadiusLimit = 0.25; // How close can the camera come to player
 	player.camera.upperRadiusLimit = 10; // How far can the camera go from the player
 	player.camera.minZ = 0.001; // Distance before camera starts to hide surfaces that are too close
 	//player.camera.checkCollisions = true; // Moves camera closer if being obscured by geometry
+}
+/** @desc update this */
+export function initScenePhysics() {
+	// See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep
+	let physEngine = new BABYLON.CannonJSPlugin(false);
+	scene.enablePhysics(gameSettings.defaultGravity, physEngine); // Using Cannon.js for physics
+	physEngine.setTimeStep(1 / 60);
+	engine.renderEvenInBackground = false;
+	engine.deltaTime = 16;
 }
 
 //==================//
 // LIGHTING HELPERS //
 //==================//
 /**
- * @todo fill this out
- * @param mesh
- * @param includeDescendants
+ * @desc Loops through all `game.shadowGenerators` and calls `.addShadowCaster()` with specified mesh, as well as optionally specifying the includeDescendents value (default is false)
  */
 export function addMeshToShadowGens(mesh, includeDescendants=false){
 	if(!mesh || game.shadowGenerators.length === 0) return; // if mesh is undefined or no shadowGenerators exist, return
-	if(gameSettings.debugMode) console.log("Adding mesh '", mesh.name, "' to shadowGenerators: ", game.shadowGenerators);
 	for(let i in game.shadowGenerators) game.shadowGenerators[i].addShadowCaster(mesh, includeDescendants);
 }
 /**
- * @todo fill this out
+ * @desc A shorthand way to create a shadowGenerator for a specified scene light. All other arguments are optional and have default values set, including using `usePoissonSampling` by default.
  */
-export function createShadowGenerator(light, mapSize = 1024, darkness = 0.5, useBlurExpShadowMap = false, blurScale = 2, blurBoxOffset = 1, ) {
+export function createShadowGenerator(light, mapSize = 1024, darkness = 0.5, useBlurExpShadowMap = false, blurScale = 2, blurBoxOffset = 1) {
 	let shadowGenerator = new BABYLON.ShadowGenerator(mapSize, light);
 	shadowGenerator.useBlurExponentialShadowMap = useBlurExpShadowMap; // Enable blur exponential shadow map
 	shadowGenerator.usePoissonSampling = !useBlurExpShadowMap; // Alternative to exponential shadows
@@ -114,6 +132,12 @@ export function createShadowGenerator(light, mapSize = 1024, darkness = 0.5, use
 	shadowGenerator.blurBoxOffset = blurBoxOffset; // Blur box offset
 	return shadowGenerator;
 }
+/**
+ * @desc Shorthand for creating a point light
+ * @example
+ * // Creates a point light at the coordinates 5,4,5 with an intensity of 0.8 & color set to magenta
+ * createPointLight("testLight", vec3(5,4,5), 0.8, newHexColor("#ff00ff"));
+ */
 export function createPointLight(name, position=vec3(), intensity=1, color=newHexColor("#ffffff")){
 	const pointLight = new BABYLON.PointLight(name, position, scene);
 	pointLight.intensity = intensity;
@@ -121,7 +145,13 @@ export function createPointLight(name, position=vec3(), intensity=1, color=newHe
 	game.lights.push(pointLight);
 	return pointLight;
 }
-export function createDirectionalLight(name, angles=vec3(), position=vec3(), intensity=1, color=newHexColor("#ffffff")){
+/**
+ * @desc Shorthand for creating a directional light
+ * @example
+ * // Creates a directional light at the coordinates 5,4,5, with an intensity of 0.8 & color set to magenta
+ * createDirectionalLight("testLight", vec3(5,4,5), 0.8, newHexColor("#ff00ff"));
+ */
+export function createDirectionalLight(name, position=vec3(), angles=vec3(), intensity=1, color=newHexColor("#ffffff")){
 	const directionalLight = new BABYLON.DirectionalLight(name, angles, scene);
 	directionalLight.position = position;
 	directionalLight.intensity = intensity;
@@ -129,14 +159,26 @@ export function createDirectionalLight(name, angles=vec3(), position=vec3(), int
 	game.lights.push(directionalLight);
 	return directionalLight;
 }
-export function createSpotLight(name, angles=vec3(), position=vec3(), angleRad=0, exponent=1, intensity=1, color=newHexColor("#ffffff")){
+/**
+ * @desc Shorthand for creating a spot light
+ * @example
+ * // Creates a spot light at the coordinates 5,4,5 with an intensity of 0.8 & color set to magenta
+ * createSpotLight("testLight", vec3(5,4,5), 0.8, newHexColor("#ff00ff"));
+ */
+export function createSpotLight(name, position=vec3(), angles=vec3(), angleRad=0, exponent=1, intensity=1, color=newHexColor("#ffffff")){
 	const spotLight = new BABYLON.SpotLight(name, position, angles, angleRad, exponent, scene);
 	spotLight.intensity = intensity;
 	spotLight.diffuse = color;
 	game.lights.push(spotLight);
 	return spotLight;
 }
-export function createHemisphereLight(name, angles=vec3(), position=vec3(), intensity=1, color=newHexColor("#ffffff")){
+/**
+ * @desc Shorthand for creating a hemisphere light
+ * @example
+ * // Creates a hemisphere light at the coordinates 5,4,5 with an intensity of 0.8 & color set to magenta
+ * createHemisphereLight("testLight", vec3(5,4,5), 0.8, newHexColor("#ff00ff"));
+ */
+export function createHemisphereLight(name, position=vec3(), angles=vec3(), intensity=1, color=newHexColor("#ffffff")){
 	const hemiLight = new BABYLON.HemisphericLight(name, angles, scene);
 	hemiLight.position = position;
 	hemiLight.intensity = intensity;
@@ -144,9 +186,13 @@ export function createHemisphereLight(name, angles=vec3(), position=vec3(), inte
 	game.lights.push(hemiLight);
 	return hemiLight;
 }
+/**
+ * @desc Initializes the default scene lighting, creating a directional "sun" light and hemisphere "ambient" light, pushing the sun light to the `game.shadowGenerators` as well
+ * @todo This may not be necessary in the future, as I plan to have each level mesh contain all of the scene's lights
+ */
 export function initDefaultLighting(){
 	// Create main light source (sun)
-	let sunLight = createDirectionalLight("sun", vec3(-1.5, -1.5, -Math.PI/2), vec3(20, 50, 20));
+	let sunLight = createDirectionalLight("sun", vec3(20, 50, 20), vec3(-1.5, -1.5, -Math.PI/2));
 	sunLight.intensity = 0.9;
 	sunLight.shadowMaxZ = 1000; // Necessary
 	// Create & set ambient lighting with tiny intensity level (just so shadowed areas aren't 100% black)
@@ -241,6 +287,8 @@ export function teleportPlayer(pos, keepVelocity = true) {teleportMesh(player.bo
  * @todo Update this function to be more generic (add `position` variable to initialize box position, check if mesh name already exists, etc)
  */
 export function generateBox(name, dimensions, position = vec3(0,0,0), material = (new BABYLON.Material("invalid",scene) || "#ff00ff"), mass = 0, friction = 0.8){
+	let checkForMeshName = scene.meshes.filter(mesh => mesh.name === name);
+	if(checkForMeshName.length > 0) return; // Mesh name already exists
 	let boxMesh = BABYLON.MeshBuilder.CreateBox(name, {width: dimensions.x, height: dimensions.y, depth: dimensions.z}, scene);
 	if(typeof material === "object"){
 		boxMesh.material = material;
@@ -284,18 +332,22 @@ export function generateRandomBoxes(amount, posOrigin = [0,0,0], posRange = [10,
 		randBox.parent = parentMesh;
 	}
 }
-/** @todo update this */
+/**
+ * @desc Loops through each `scene.meshes` object and disposes of the mesh, as well as all child meshes
+ */
 export function deleteMeshesByName(nameToDelete) {
 	const meshesToDelete = scene.meshes.filter(mesh => mesh.name === nameToDelete);
+	if(!meshesToDelete) return;
 	meshesToDelete.forEach(mesh => {
-		if (mesh.getChildren()) {
-			// Dispose of children meshes first
-			mesh.getChildren().forEach(child => child.dispose());
-		}
-		mesh.dispose();// Dispose of the parent mesh itself
+		// Dispose children meshes first
+		if (mesh.getChildren()) mesh.getChildren().forEach(child => child.dispose());
+		mesh.dispose();// Dispose parent mesh
 	});
 }
-/** @todo update this */
+/**
+ * @desc Retrieves the "down" direction relative to the `player.body`'s current rotation value
+ * @returns BABYLON.Vector3
+ */
 export function getPlayerDownDirection() {
 	// Ensure the player's rotation quaternion exists
 	let rotationQuaternion = player.body.rotationQuaternion || BABYLON.Quaternion.Identity();
@@ -305,16 +357,20 @@ export function getPlayerDownDirection() {
 	BABYLON.Matrix.FromQuaternionToRef(rotationQuaternion, transformMatrix); // Fill it with quaternion data
 
 	// Transform the local down direction to world space using the matrix
-	let result = BABYLON.Vector3.TransformNormal(vec.down, transformMatrix).normalize();
-	player.curDownVector = result;
-	return result;
+	return BABYLON.Vector3.TransformNormal(vec.down, transformMatrix).normalize();
 }
-/** @todo update this */
+/**
+ * @desc Casts a ray below the player in order to check if the player is colliding with the ground or not
+ * @returns BABYLON.PickingInfo
+ */
 export function checkCanJump(rayLength){
-	let playerDownDirection = getPlayerDownDirection();
-	return rayCast(player.body, playerDownDirection, rayLength);
+	return rayCast(player.body, getPlayerDownDirection(), rayLength);
 }
-/** @todo update this */
+/**
+ * @desc Creates a new mesh collision event action specifically for trigger meshes (aka meshes the player is meant to be able to move through
+ * @desc Returns the newly created `ActionManager` object. Handles both "OnIntersectionEnterTrigger" and "OnIntersectionExitTrigger" events, specified by the `onEnterOrExit` parameter (uses "onEnter" by default)
+ * @returns BABYLON.ActionManager
+ */
 export function createMeshEvent(collisionMesh, onEnterOrExit, detectMesh, desiredFunc){
 	const onExit = (onEnterOrExit==="exit"||onEnterOrExit==="onExit"); // Specify `onExit` conditions so everything else defaults to `onEnter`
 	let newAction = new BABYLON.ExecuteCodeAction({
@@ -323,7 +379,7 @@ export function createMeshEvent(collisionMesh, onEnterOrExit, detectMesh, desire
 	},desiredFunc);
 	collisionMesh.actionManager = new BABYLON.ActionManager(scene);
 	collisionMesh.actionManager.registerAction(newAction);
-	//return collisionMesh.actionManager; // Return the actionManager object (optional/unnecessary?)
+	return collisionMesh.actionManager; // Return the actionManager object
 }
 
 //===============//
@@ -336,7 +392,7 @@ let fixedLine, velocityLine;
  * @param {BABYLON.Vector3} offset Defines where to position the axisHelper
  */
 export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
-	let axisHelperMesh = new BABYLON.Mesh("debug_axisHelper");
+	let axisHelperMesh = new BABYLON.TransformNode("debug_axisHelper");
 	let makeTextPlane = (text, color, size) => {
 		let dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", 50, scene, true);
 		dynamicTexture.hasAlpha = true;
@@ -382,13 +438,15 @@ export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
 	], new BABYLON.Color3(0, 0, 1), "Z", vec3(0, 0.05 * size, 0.9 * size), "blue");
 	axisHelperMesh.position = offset;
 	axisHelperMesh.checkCollisions = false;
+	return axisHelperMesh;
 }
-/** @todo update this */
+/**
+ * @desc Casts a ray below the player and gets the surface normal rotation value. By default, the `relativeToPlayer` parameter is true
+ */
 export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
 	// Perform the raycast to detect the mesh below the player
-
+	// TODO: Update `relativeToPlayer` ray direction to equal down direction of the player body's down direction, factoring in the body's current rotation (use getVecDifInDegrees() maybe?)
 	const hit = rayCast(mesh, relativeToPlayer = vec.down, rayLength);//scene.pickWithRay(downwardRay);
-
 
 	// Check if a mesh was hit
 	if (hit && hit.hit) {
@@ -396,10 +454,6 @@ export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
 		const normal = hit.getNormal(true, false); // Get the normal vector at the hit point
 		//console.log("normal:",  normal, "pickedMesh.name:", pickedMesh.name);
 		if(relativeToPlayer !== vec.down){
-			const normalizedDirection = player.movementDirection.normalize();
-			// Calculate desired Y-axis angle from `desiredMovement`, quantize to 45 deg
-			let angle = Math.atan2(normalizedDirection.x, normalizedDirection.z);
-			const quantizedYAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
 			const surfaceRotation = BABYLON.Quaternion.FromLookDirectionLH(
 				BABYLON.Vector3.Cross(vec.right.scale(-1), normal), // Compute look direction
 				normal
@@ -407,27 +461,28 @@ export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
 			surfaceRotation.multiply(getPlayerDownDirection().toQuaternion());
 			return surfaceRotation.toEulerAngles();
 		}
-		//console.log("normal",normal);
 		if (normal) return normal; // If normal is not undefined, return the normal vector
 	}
-	return vec.up; // No hit detected, return absolute up vector
+	return vec.up; // No hit detected, return "up" vector by default
 }
-/** @todo update this */
+/**
+ * @desc Returns the original vector, but clamped to the `maxLength` value
+ */
 export function clampVector3ToMaxLength(vector, maxLength) {
 	const length = vector.length(); // Get the magnitude of the vector
 	if (length > maxLength) {
 		return vector.scale(maxLength / length); // Scale down to the maximum length
 	}
-	return vector; // Return as-is if it's already within the limit
+	return vector; // Return `vector` if it's already less than the `maxLength` value
 }
-/** @todo update this */
+/**
+ * @desc Untested/unused function
+ */
 export function getVecDifInDegrees(vec1, vec2){
 	return BABYLON.Tools.ToDegrees(Math.acos(BABYLON.Vector3.Dot(vec1.normalize(), vec2.normalize())))
 }
-/** @todo update this */
-export function getHorizontalSpeedFromVec(moveVector) {return Math.sqrt(moveVector.x ** 2 + moveVector.z ** 2);}
 /**
- * @todo UNTESTED FUNCTION, also update this
+ * @desc Untested/unused function
  */
 export function createTrajectoryLines(mesh) {
 	fixedLine = BABYLON.MeshBuilder.CreateLines("fixedLine", {
@@ -481,12 +536,16 @@ export function createTrajectoryLines(mesh) {
 	};
 }
 
+
+//======//
+// MISC //
+//======//
 /**
- * JSDoc parameter usage example
+ * JSDoc usage example
  *
  * @description Takes `size` of rectangle and returns the calculated area as a `string`.
  * @param {object} size - The width of the rectangle.
- * @param {boolean} round - Should the output be rounded to the nearest decimal place
+ * @param {boolean} roundResult - Should the result be rounded to nearest decimal place
  * @returns {string} The calculated area with units.
  * @throws {Error} Throws an error if width or height is negative.
  * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript
@@ -497,6 +556,6 @@ export function createTrajectoryLines(mesh) {
  * // Basic usage #2:
  * calculateArea(5.11, 10.52, true); // "54 sq.units", rounds the number if decimals present
  */
-function calculateArea(size, round){
-	return round?Math.round(size.x * size.y)+"":size.x * size.y;
+function calculateArea(size, roundResult){
+	return roundResult?Math.round(size.x * size.y)+"":size.x * size.y;
 }

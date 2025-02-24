@@ -8,23 +8,17 @@
 
   <title>Babylon.js - Yarn ball!</title>
 
-  <!-- FOR PRODUCTION: UNCOMMENT THIS & DELETE LOCAL FILES
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.babylonjs.com/cannon.js"></script>
-  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
-  <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script> <!-- Get latest version of Babylon.js -->
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script> <!-- Get latest version -->
+  <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script> <!-- Get latest version -->
+  <script src="https://cdn.babylonjs.com/cannon.js"></script> <!-- Get latest version -->
+  <script src="js/lib/jquery-3.7.1.js"></script><!-- Use `.min` version for production -->
+  <script src="js/lib/jquery-ui.js"></script><!-- Use `.min` version for production -->
 
-  -->
-  <!-- FOR LOCAL TESTING: -->
-  <script src="js/lib/jquery-3.7.1.js"></script><!-- use `.min` version for production -->
-  <script src="js/lib/jquery-ui.js"></script><!-- use `.min` version for production -->
-  <script src="js/lib/babylon.js"></script>
-  <script src="js/lib/cannon.js"></script>
-  <script src="js/lib/babylonjs.loaders.js"></script>
-  <script src="js/lib/babylon.inspector.bundle.js"></script>
   <link rel="stylesheet" href="css/reset.css">
-  <link rel="stylesheet" href="css/main.css"> <!-- https://getbootstrap.com/docs/5.3/customize/sass/ -->
+  <link rel="stylesheet" href="css/main.css">
+  <!-- Bootstrap is imported in main.scss file via the `node_modules` folder -->
+  <!-- See: https://getbootstrap.com/docs/5.3/customize/sass/ -->
 </head>
 <body data-bs-theme="dark">
   <div id="menus" class="fullscreen clickThrough">

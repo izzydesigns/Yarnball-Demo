@@ -1,11 +1,13 @@
-import {player, scene, engine, canvas, gameSettings, game} from "./main.js";
+import {player, scene, engine, canvas, gameSettings, game} from "./globals.js";
 import * as utils from "./utils.js";
 import {vec3} from "./utils.js";
 
 export let isMobile, isTablet, isAndroid, isiPhone, isiPad;
+let axisHelper; // Local variable containing a debug axisHelper
+
 /**
  * @description Initializes `addEventListener`s on "keydown" and "keyup" events.
- * @description Also sets player.movement booleans based on keyboard inputs (appropriate `key.code` values are fetched from `gameSettings.controls`)
+ * @description Also sets `player.movement` booleans based on keyboard inputs (appropriate `key.code` values are fetched from globals.js -> `gameSettings.controls`)
  */
 export function initKeyboardListeners() {
     let debugLayer = scene.debugLayer;
@@ -31,7 +33,7 @@ export function initKeyboardListeners() {
             utils.generateRandomBoxes(50, [0,5,0], [25,5,25], [[0.1,5], [0.1,0.1], [0.1,5]]);
         }
         if (key.code === "NumpadSubtract"){
-            console.error("%cYou're doing a great job, keep it up!!! ❤️❤️❤️", 'color: #111; font-size: 32px; background-color: #aaee88;');
+            utils.teleportPlayer(vec3(0,2,0));
         }
     });
     window.addEventListener("keyup", function (key) {
@@ -52,19 +54,18 @@ export function initKeyboardListeners() {
         if (key.code === input.walk) {player.movement.walking = false;}
         if (key.code === input.sprint && player.movement.sprinting) {player.movement.sprinting = false;}
         if (key.code === gameSettings.controls.developerMenu) {// Tab key to toggle debug mode
-            if (!scene.debugLayer.isVisible()) {
-                gameSettings.debugMode = true;
-                debugLayer.show();
-            } else {
-                gameSettings.debugMode = false;
-                debugLayer.hide();
-            }
             console.log("Toggling debug layer",gameSettings.debugMode);
+            if (!scene.debugLayer.isVisible()) {gameSettings.debugMode = true;debugLayer.show().then();}
+            else {gameSettings.debugMode = false;debugLayer.hide();}
+            if(gameSettings.debugMode){ // Draws/creates an axisHelpers
+                if(!axisHelper){axisHelper = utils.showAxisHelper(1, vec3(0,1,0));}
+                else{axisHelper.setEnabled(true);}
+            }else{axisHelper.setEnabled(false);}
         }
     });
 }
 /**
- * @description Initializes misc `window` eventListeners for things like detecting window `"click"`, `"resize"`, and `"load"` events.
+ * @description Initializes misc `window` eventListeners for things like detecting window "click", "resize", and "load" events.
  */
 export function initWindowFunctions() {
     // Handle window resize events properly
@@ -97,13 +98,14 @@ export function initWindowFunctions() {
             // Pause game
             utils.pauseScene();
             game.paused = true;
+            if(gameSettings.debugMode)console.log("Pausing scene...");
         }else{
             // Resume game
             utils.resumeScene();
             game.paused = false;
+            if(gameSettings.debugMode)console.log("Resuming scene...");
         }
     });
-
     // Prevents user from opening context menu via right clicking
     document.addEventListener('contextmenu', (event) => {event.preventDefault()});
     // Handle cursor locking

@@ -1,8 +1,8 @@
-import {player, scene, gameSettings, game} from "./main.js";
+import {player, scene, gameSettings, game} from "./globals.js";
 import * as movement from "./movement.js";
 
 /**
- * @description Object containing raw `animationGroup` names, multiple animation names provided specify which animations have a follow-up animation that must be played upon completion
+ * @desc Object containing raw `animationGroup` names, multiple animation names provided specify which animations have a follow-up animation that must be played upon completion
  */
 export const animationData = {
     // Player animation list: [animationGroup.name, nextAnimation?]
@@ -14,7 +14,7 @@ export const animationData = {
     idleLaying: ["cat_idleLayDown"],
     idleSit: ["cat_idleSitA"],
     idleSitClean: ["cat_idleSitClean"],
-    idleSleep: ["cat_","cat_idleSleep"],
+    idleSleep: ["cat_idleSleep"],
     idleStand: ["cat_idleStandA"],
     idleStandClean: ["cat_idleStandClean"],
     jump: ["cat_jump", "cat_idleStandA"],
@@ -41,7 +41,7 @@ export const animationData = {
     walkToTrot: ["cat_walk_toTrot", "cat_trot"],
 };
 /**
- * @description Used to apply specific qualities to all/some animations (mainly used to assign default animation weight & blending status)
+ * @desc Used to apply specific qualities to all/some animations (mainly used to assign default animation weight & blending status)
  */
 export function initAnimations() {
     for (let animations of scene.animationGroups) game.animations.push(animations.name)
@@ -59,9 +59,15 @@ export function initAnimations() {
     }
 }
 /**
- * @description Returns which player animation should be playing based on the player's data
+ * @desc Returns which player animation should be playing based on the player's data
  */
 function getAnimationState() {
+
+    // Handle player idling animation
+    if(player.lastMoveTime + gameSettings.defaultTimeBeforeSleepIdle <= game.time){
+        return animationData.idleSleep;
+    }
+
     // Handle jumping/falling animations
     if(player.movement.jumping && player.onGround && !movement.jumpedTooRecently){
         if(gameSettings.debugMode) console.log("Player jumped!");
@@ -98,45 +104,33 @@ function getAnimationState() {
         case player.speed === 0:
             // If nothing else has returned by now and player.speed = 0, we must be idling...
             return animationData.idleStand;
-        default:
-            // If none of the above conditions are met somehow... return `idleStand`
-            return animationData.idleStand;
     }
 }
 /**
- * @description Logic code run every frame to detect changes to the player animation state
+ * @desc Logic code run every frame to detect changes to the player animation state
  */
 export function handleAnimations() {
     const newState = getAnimationState();
     if (!newState || newState === player.curAnimation) return;
-    if(player.curAnimation !== newState || player.curAnimation !== player.lastAnimation) {
-        player.lastAnimation = player.curAnimation;
-        //player.curAnimation = newState;
+    if(player.curAnimation !== newState) {
         playAnimation(newState);
-        if(gameSettings.debugMode)console.log("playing new anim!",newState);
+        //console.log("playing new anim!",newState);
     }
 }
 /**
- * @description Animation playing handler (allows looping, start, and stop time specification per animation)
+ * @desc Animation playing handler (allows looping, start, and stop time specification per animation)
  */
 export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = undefined) {
     if(Array.isArray(newAnim) && newAnim[0] !== player.curAnimation[0]) {
-        if (newAnim[1]) {
+        if (newAnim[1]) { // If there is a second animation in the newAnim array, handle appropriately
             // Retrieve newAnim[0] animation key from animationData object (if it exists)
-            const animKey = Object.values(animationData).find(anim => anim[0] === newAnim[0]);
-            if (!animKey) return;
-            // Get transition animationGroup (if it exists)
-            const transitionAnim = scene.getAnimationGroupByName(animKey[0]);
-            if (!transitionAnim) return;
-            // Get idle animationGroup (if it exists)
-            const idleAnim = scene.getAnimationGroupByName(newAnim[1]);
-            if (!idleAnim) return;
-            idleAnim.weight = 0;
+            const animKey = Object.values(animationData).find(anim => anim[0] === newAnim[0]);if (!animKey) return;
+            const transitionAnim = scene.getAnimationGroupByName(animKey[0]);if (!transitionAnim) return;
+            const idleAnim = scene.getAnimationGroupByName(newAnim[1]);if (!idleAnim) return;
 
-            // Stop all other animations to avoid animation stacking
-            stopAllAnimations();
+            stopAllAnimations(); // Stop all other animations
 
-            // Sets specified starting frame (if specified, currently disabled due to being untested & unused)
+            // Sets specified starting frame (currently disabled, seemingly not working?)
             /*if (startFrame > 0) {
                 transitionAnim.goToFrame(startFrame);
                 transitionAnim.play(false);
@@ -158,79 +152,39 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
 
             // Play the original desired animation, then set isTransitioning to true until animation has completed.
             transitionAnim.reset();transitionAnim.play(false);transitionAnim.weight = 1;
-            if(gameSettings.debugMode)console.log("playing transition anim ☀️️", newAnim[0]," (afterwards play ",newAnim[1],")");
+            if(gameSettings.debugMode)console.log("playing transition anim: ", newAnim[0]," (on completion, play: ",newAnim[1],")");
 
             player.isAnimTransitioning = true;
-            player.lastAnimation = player.curAnimation;
-            player.curAnimation = newAnim;
+            player.lastAnimation = player.curAnimation;player.curAnimation = newAnim;
 
             transitionAnim.onAnimationGroupEndObservable.addOnce(() => {
-                transitionAnim.stop();
-                transitionAnim.weight = 0;
+                stopAllAnimations(); // Stop all other animations
                 idleAnim.reset();idleAnim.play(true);idleAnim.weight = 1;
-                if(gameSettings.debugMode)console.log("playing final anim 🌑️", newAnim[1]);
+                if(gameSettings.debugMode)console.log("playing final anim: ", newAnim[1]);
                 player.isAnimTransitioning = false;
             });
 
             return;
         }
-        const desiredPlayAnim = scene.getAnimationGroupByName(newAnim[0]);
-        if (desiredPlayAnim) { // add && !player.isAnimTransitioning if you want single animations to finish before playing new animation
-            // Stop all other animations on the mesh before proceeding
-            stopAllAnimations();
-            // Reset, start, and weight=1 to getNewAnim
-            desiredPlayAnim.reset();desiredPlayAnim.start(loop, 1.0, startFrame, endFrame ? endFrame : desiredPlayAnim.to);desiredPlayAnim.weight = 1;
-            player.lastAnimation = player.curAnimation;
-            player.curAnimation = newAnim;
-            if(gameSettings.debugMode)console.log("playing anim ▶️", newAnim[0]);
+        if (scene.getAnimationGroupByName(newAnim[0])) {
+            const desiredPlayAnim = scene.getAnimationGroupByName(newAnim[0]);
+            stopAllAnimations(); // Stop all other animations on the mesh before proceeding
+            // Reset, start, and `weight=1` on our desiredPlayAnim
+            desiredPlayAnim.reset();
+            desiredPlayAnim.start(loop, 1.0, startFrame, endFrame ? endFrame : desiredPlayAnim.to);
+            desiredPlayAnim.weight = 1;
+            player.lastAnimation = player.curAnimation;player.curAnimation = newAnim; // Update `curAnimation` & `lastAnimation`
+            if(gameSettings.debugMode)console.log("playing anim: ", newAnim[0]);
             return;
         }
     }
     return false;
 }
-export function stopAnimation(animName) {
-    let playingAnimations = scene.animationGroups.filter(group => group.name === animName[0]);
-    playingAnimations.forEach(group => {
-        group.stop();
-        group.weight = 0;
-    });
-}
-export function queueAnimation(animName, loop = true, startFrame = 0, endframe = undefined) {
-    let playingAnimations = scene.animationGroups.filter(group => group.isPlaying);
-    playingAnimations.forEach(animationGroup => {
-        if(animationGroup.loopAnimation) return;
-        animationGroup.onAnimationGroupEndObservable.addOnce(() => {
-            let recheckAnimations = scene.animationGroups.filter(group => group.isPlaying);
-            if(recheckAnimations.length === 0){
-                playAnimation(animName, loop, startFrame, endframe);
-            }
-        });
-    });
-}
+/**
+ * @desc Stops ALL animations loaded in the scene via `scene.animationGroups`, calling .stop() and weight = 0
+ */
 export function stopAllAnimations() {
-    // Flag to track if any animation weights are above zero or groups are playing
-    let anyPlaying = false;
-
-    // Check and stop all animation groups
-    scene.animationGroups.filter(group => group.isPlaying).forEach(animationGroup => {
-        anyPlaying = true;
-        animationGroup.stop(); // Stop the animation group
-        animationGroup.weight = 0; // Set weight to zero
-    });
-
-    let playingAnimations = scene.animationGroups;
-    playingAnimations.forEach(group => {
-        anyPlaying = true;
-        group.stop();
-        group.weight = 0;
-    });
-
-    // Log whether any animations were playing
-    if(gameSettings.debugMode){
-        if (anyPlaying) {
-            console.log("Stopped all animations and set their weights to zero.");
-        } else {
-            console.log("No animations were playing.");
-        }
-    }
+    let sceneAnimations = scene.animationGroups;
+    sceneAnimations.forEach(group => {group.stop();group.weight = 0;});// Loop through each & stop every animation group
+    if(gameSettings.debugMode) console.log("Stopped all animations and set their weights to zero.");
 }

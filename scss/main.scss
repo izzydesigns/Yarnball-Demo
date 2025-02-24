@@ -1,11 +1,14 @@
-// Required Bootstrap imports
+// Bootstrap imports
+// See: https://getbootstrap.com/docs/5.3/customize/sass/#importing
 @import "../node_modules/bootstrap/scss/bootstrap";
+/*
+Unused imports:
 @import "../node_modules/bootstrap/scss/variables";
 @import "../node_modules/bootstrap/scss/variables-dark";
 @import "../node_modules/bootstrap/scss/maps";
 @import "../node_modules/bootstrap/scss/mixins";
 @import "../node_modules/bootstrap/scss/root";
-/*@import "../node_modules/bootstrap/scss/functions";
+@import "../node_modules/bootstrap/scss/functions";
 @import "../node_modules/bootstrap/scss/reboot";
 @import "../node_modules/bootstrap/scss/type";
 @import "../node_modules/bootstrap/scss/images";
