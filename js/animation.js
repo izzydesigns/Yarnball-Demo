@@ -6,6 +6,8 @@ import * as movement from "./movement.js";
  */
 export const animationData = {
     // Player animation list: [animationGroup.name, nextAnimation?]
+    // TODO: Add ability to specify blendingSpeed values for each animation, i.e. idleSleep should be 0.025 but the default is 0.1
+    // TODO: Add a way to specify custom start & stop frames (use percentage value from 0 to 100)
     crawl: ["cat_crawl"],
     crouchToStand: ["crouchA_toStandA", "cat_idleStandA"],
     gallop: ["cat_gallop"],
@@ -65,6 +67,7 @@ function getAnimationState() {
 
     // Handle player idling animation
     if(player.lastMoveTime + gameSettings.defaultTimeBeforeSleepIdle <= game.time){
+        if(!player.isSleeping){player.isSleeping = true;}
         return animationData.idleSleep;
     }
 
@@ -130,8 +133,8 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
 
             stopAllAnimations(); // Stop all other animations
 
-            // Sets specified starting frame (currently disabled, seemingly not working?)
-            /*if (startFrame > 0) {
+            /*// Sets specified starting frame (currently disabled, seemingly not working?)
+            if (startFrame > 0) {
                 transitionAnim.goToFrame(startFrame);
                 transitionAnim.play(false);
                 transitionAnim.weight = 1;
@@ -173,6 +176,8 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
             desiredPlayAnim.reset();
             desiredPlayAnim.start(loop, 1.0, startFrame, endFrame ? endFrame : desiredPlayAnim.to);
             desiredPlayAnim.weight = 1;
+            // Slow the sleeping animation transition speed down
+            if(newAnim[0] === "cat_idleSleep" && desiredPlayAnim.blendingSpeed !== 0.025) desiredPlayAnim.blendingSpeed = 0.025;
             player.lastAnimation = player.curAnimation;player.curAnimation = newAnim; // Update `curAnimation` & `lastAnimation`
             if(gameSettings.debugMode)console.log("playing anim: ", newAnim[0]);
             return;
@@ -183,8 +188,4 @@ export function playAnimation(newAnim, loop = true, startFrame = 0, endFrame = u
 /**
  * @desc Stops ALL animations loaded in the scene via `scene.animationGroups`, calling .stop() and weight = 0
  */
-export function stopAllAnimations() {
-    let sceneAnimations = scene.animationGroups;
-    sceneAnimations.forEach(group => {group.stop();group.weight = 0;});// Loop through each & stop every animation group
-    if(gameSettings.debugMode) console.log("Stopped all animations and set their weights to zero.");
-}
+export function stopAllAnimations() {scene.animationGroups.forEach(group => {group.stop();group.weight = 0;})}

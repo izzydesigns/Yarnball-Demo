@@ -6,12 +6,12 @@ import * as screen from "./screen.js";
 import * as utils from "./utils.js";
 import {quat, vec3, getSurfaceNormal} from "./utils.js";
 
+await utils.initEngineAndScene();
 (async () => {
 
-	utils.initScenePhysics(); // PHYSICS AND GRAVITY
-	utils.initPlayerCamera(); // CAMERA
-	utils.initDefaultLighting(); // LIGHTING & SHADOWS
-	utils.createSkybox("res/skybox/Sky_LosAngeles"); // SKYBOX
+	utils.initPlayerCamera();
+	utils.enableDefaultLighting(); // TODO: Eventually remove this & properly load all lights from the level mesh itself
+	utils.createSkybox("res/skybox/Sky_LosAngeles"); // TODO: Also put this inside the map itself, for consistency sake
 
 	// Loads player.mesh & create physicsImpostor for player.body
 	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "cat_default.glb", scene).then((result) => {
@@ -29,7 +29,7 @@ import {quat, vec3, getSurfaceNormal} from "./utils.js";
 		const cameraOffset = player.mesh.position.addInPlace(gameSettings.defaultCamOffset);
 		const offsetMesh = BABYLON.MeshBuilder.CreateBox("camOffset",{size:0.01},scene);
 		offsetMesh.position = cameraOffset;offsetMesh.parent = player.mesh;
-		offsetMesh.checkCollisions = false;offsetMesh.isVisible = false;
+		offsetMesh.isVisible = false;
 		game.shadowGenerators[0].addShadowCaster(result.meshes[1]);
 		player.camera.setTarget(offsetMesh); // Set camera target to offset mesh, which is parented to player.mesh
 
@@ -37,24 +37,27 @@ import {quat, vec3, getSurfaceNormal} from "./utils.js";
 		player.body = BABYLON.MeshBuilder.CreateBox("playerBody",{width: 0.175 * player.scale, height: 0.4 * player.scale, depth: 0.6 * player.scale},scene);
 		// TODO: `friction = 0` currently (custom friction used in `movement.js` instead), so any object friction against the player's physics impostor is zero
 		player.body.physicsImpostor = new BABYLON.PhysicsImpostor(player.body, BABYLON.PhysicsImpostor.BoxImpostor,{
-				mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0
+			mass: gameSettings.defaultPlayerMass, friction: 0, restitution: 0
 		},scene);
 		player.body.physicsImpostor.angularDamping = 0; // Zero damping for instant turning
 		player.body.isVisible = gameSettings.debugMode; // Initialize player.body visibility based on initial `debugMode` status
 		player.body.position = gameSettings.defaultSpawnPoint; // Teleport mesh to defaultSpawnPoint if the level being loaded does not specify a spawn point
 	});
+
 	// Loads first level, and handles collision enabling, triggers, and lighting
 	await BABYLON.SceneLoader.ImportMeshAsync("", "../res/models/", "first_level.glb", scene).then((result) => {
 		let collisionParent = new BABYLON.TransformNode("level1 colliders", scene); // Creates parent object for all colliders
 		//let triggerParent = new BABYLON.TransformNode("level1 triggers", scene); // Creates parent object for all triggers
-		let resultMesh = result.meshes[1]; // Get actual level geometry mesh
-		resultMesh.material.maxSimultaneousLights = 64; // Enable all lights on mesh
-		resultMesh.receiveShadows = true; // Enable shadows on main level mesh
-		game.shadowGenerators[0].addShadowCaster(resultMesh); // Enable shadow casting on the mesh as well
 
 		// Get meshes & create colliders for submeshes ending with "_collider" (REMEMBER: ctrl + a -> apply scale + 'set origin to geometry' before exporting!!!)
 		for(let curGeo of result.meshes){
-			if(curGeo.name.endsWith("_collider") /* || endsWith("_trigger") */) {
+			if(curGeo.name.startsWith("Level")){
+				let levelMesh = curGeo; // Get actual level geometry mesh
+				levelMesh.material.maxSimultaneousLights = 64; // Enable all lights on mesh
+				levelMesh.receiveShadows = true; // Enable shadows on main level mesh
+				game.shadowGenerators[0].addShadowCaster(levelMesh); // Enable shadow casting on the mesh as well
+			}else
+			if(curGeo.name.endsWith("_collider")) { // || endsWith("_trigger")
 				if(curGeo.name.startsWith("Cube")){
 					// Handle cube colliders
 					let colliderBB = curGeo.getBoundingInfo().boundingBox;
@@ -91,7 +94,10 @@ import {quat, vec3, getSurfaceNormal} from "./utils.js";
 		// Load scene lights (and fix intensity)
 		for(let light of result.lights){
 			light.intensity *= 0.0025; // Fix for intensity scaling issue, adjust as necessary
-			// Create shadow casters for each light here as well? (See: https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows#point-lights )
+			// Create shadow casters? (See: https://doc.babylonjs.com/features/featuresDeepDive/lights/shadows#point-lights )
+			// TODO: Destroy lights loaded from mesh & use baked lighting instead for most level lights
+			//light.dispose();
+			// Create new light to replace previous one (might need to grab light data before disposing)
 		}
 	});
 
@@ -118,6 +124,7 @@ import {quat, vec3, getSurfaceNormal} from "./utils.js";
 			animation.handleAnimations();movement.handleMovement();screen.updateMenus();
 		}
 		movement.handleRotationAndPosition(); // Handle rotation & position assignment EVERY frame
+		utils.checkCameraCollision(); // Checks for camera collision every frame (serves as our own `checkCollisions` function, as that is no longer enabled)
 	});
 
 	// Register `player.body` collide event (filters out `player.body` and `player.mesh` from calculations)

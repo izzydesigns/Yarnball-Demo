@@ -1,41 +1,69 @@
-import {canvas, engine, game, gameSettings, player, scene} from "./globals.js";
+import {canvas, engine, game, gameSettings, player, scene, setEngine, setScene} from "./globals.js";
 
-//===================================//
-// SCENE HELPERS/SHORTHAND VARIABLES //
-//===================================//
+//===============//
+// SCENE HELPERS //
+//===============//
 /**
- * @desc Shorthands for `BABYLON.Vector3.Up()`, `.Down()`, etc
- * @type {{up: BABYLON.Vector3, down: BABYLON.Vector3, right: BABYLON.Vector3, left: BABYLON.Vector3, forward: BABYLON.Vector3, backward: BABYLON.Vector3}}
- * @example
- * vec.up;
- * // instead of:
- * BABYLON.Vector3.Up();
+ * @desc Checks for WebGPU support, and if supported, initializes the `engine` variable with a new `WebGPUEngine` instance, otherwise uses default `Engine`.
+ * @returns {BABYLON.Engine || BABYLON.WebGPUEngine} A new `BABYLON.Engine` or `BABYLON.WebGPUEngine` based on detected webGPU support
  */
-export let vec = {
-	up: vec3(0,1,0),
-	down: vec3(0,-1,0),
-	right: vec3(1,0,0),
-	left: vec3(-1,0,0),
-	forward: vec3(0,0,1),
-	backward: vec3(0,0,-1),
+async function createNewEngine() {
+	const webGPUSupported = navigator.gpu;
+	console.log("Initializing game engine. WebGPU is "+(webGPUSupported?"":"not ")+"supported.");
+	if (webGPUSupported) { // TODO: Fix WebGPUEngine issues, currently only WebGL 2.0 engine works...
+		return new BABYLON.WebGPUEngine(canvas, {
+			deterministicLockstep: true, lockstepMaxSteps: 4, antialias: true
+		});
+	} else {
+		return new BABYLON.Engine(canvas, true, {
+			deterministicLockstep: true, lockstepMaxSteps: 4, antialias: true,
+		});
+	}
 }
 /**
- * @desc Shorthand for `new BABYLON.Vector3(x,y,z)`, use `vec3(x,y,z)` instead for brevity
- * @desc Default values are `0,0,0`, so `vec3()` is equivalent to `BABYLON.Vector3.Zero()`
+ * @desc Initializes the game's `engine` and `scene` variables (also uses CannonJS)
+ * @desc Also sets the physics engine timeStep to `1/60` and uses `gameSettings.defaultGravity` for the gravity value
  */
-export function vec3(x=0,y=0,z=0){return new BABYLON.Vector3(x,y,z);}
+export async function initEngineAndScene() {
+	BABYLON.Engine.MaxStorageBuffersPerShaderStage = 16; // Example value, may vary per device
+	const tempEngine = await createNewEngine();
+	setEngine(tempEngine); // Initialize & assign `engine` variable
+	if(tempEngine.isWebGPU) await engine.initAsync();
+	setScene(new BABYLON.Scene(engine)); // Initialize & assign `scene` variable
+	engine.renderEvenInBackground = false;
+	engine.deltaTime = 16;
+	// See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep
+	let physEngine = new BABYLON.CannonJSPlugin(false);
+	physEngine.setTimeStep(1 / 60);
+	scene.enablePhysics(gameSettings.defaultGravity, physEngine); // Using Cannon.js for physics
+}
 /**
- * @desc Shorthand for `new BABYLON.Quaternion(x,y,z,w)`, use `quat(x,y,z,w)` instead for brevity
- * @desc Default values are `0,0,0,0`, so `quat()` is equivalent to `BABYLON.Quaternion.Zero()`
+ * @desc Initializes the `player.camera` variable with a new ArcRotateCamera named "camera", with it's radius set to `gameSettings.defaultCameraDistance`
+ * @desc Collisions on the camera are also currently enabled (however changing the `camera.ellipsoid` doesn't seem to work)
  */
-export function quat(x=0,y=0,z=0,w=0){return new BABYLON.Quaternion(x,y,z,w);}
+export function initPlayerCamera() {
+	player.camera = new BABYLON.ArcRotateCamera(
+		"camera",
+		Math.PI / 2, // Alpha (horizontal rotation)
+		Math.PI / 3, // Beta (vertical rotation)
+		gameSettings.defaultCameraDistance, // Radius (distance from the target)
+		undefined, // Target (initialized later)
+		scene
+	);
+	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
+	player.camera.wheelPrecision = 150; // How much each scrollwheel scroll zooms the camera in/out
+	player.camera.lowerRadiusLimit = 0.25; // How close can the camera come to player
+	player.camera.upperRadiusLimit = 10; // How far can the camera go from the player
+	player.camera.minZ = 0.001; // Distance before camera starts to hide surfaces that are too close
+	//player.camera.checkCollisions = true; // Moves camera closer if being obscured by geometry
+	//player.camera.ellipsoid =  player.camera.collisionRadius = vec3(0.1, 0.1, 0.1); // Set dimensions of camera collider
+}
 /**
  * @desc Pauses the game using `engine.stopRenderLoop()`, and sets `scene.animationsEnabled` to `false` to pause animations.
  * @see https://doc.babylonjs.com/typedoc/classes/BABYLON.Engine#stoprenderloop Babylon API documentation.
  */
 export function pauseScene() {
 	engine.stopRenderLoop(); // Pause game's render loop
-	scene.animationsEnabled = false; // Temporarily disables animations
 	if(gameSettings.debugMode) console.log("Window/tab has been minimized, scene should pause...");
 }
 /**
@@ -47,6 +75,28 @@ export function resumeScene() {
 	engine.runRenderLoop(() => scene.render()); // Resume rendering
 	scene.animationsEnabled = true; // Resumes scene animations
 	if(gameSettings.debugMode) console.log("Window/tab is visible again! Resume the scene.");
+}
+/**
+ * @desc Checks if the camera is obstructed by something and brings the camera closer to the player.
+ * @desc Also sets the camera distance back to `defaultCameraDistance` when no longer obscured.
+ */
+export function checkCameraCollision() {
+	let desiredRadius = gameSettings.defaultCameraDistance;
+	if(player.camera.radius < desiredRadius - (desiredRadius / 10/*Added buffer*/)) {
+		// If not obstructed, attempt to reset to default radius
+		//console.log("attempting to reset radius value", player.camera.radius, " desired value: ",desiredRadius);
+		player.camera.radius = BABYLON.Scalar.Lerp(player.camera.radius, gameSettings.defaultCameraDistance, 0.01); // Smooth transition back
+	}
+	const direction = player.camera.position.subtract(player.camera.target).normalize(); // Direction from player to camera
+	const ray = new BABYLON.Ray(player.camera.target, direction, gameSettings.defaultCameraDistance);
+	const hit = scene.pickWithRay(ray, (mesh) => !excludedMeshesFromRaycast.includes(mesh)); // Check if something is blocking the view
+	if(!hit.pickedPoint) return;
+	if (hit && hit.pickedPoint) {
+		//console.log("camera obstructed, setting radius to smaller value");
+		// If obstructed, move camera closer to the hit point
+		let minCamDistance = gameSettings.defaultCameraDistance/8;
+		player.camera.radius = Math.max(BABYLON.Vector3.Distance(player.camera.target, hit.pickedPoint) - 0.5, minCamDistance);
+	}
 }
 let excludedMeshesFromRaycast = [];
 /**
@@ -71,8 +121,12 @@ export function rayCast(mesh, rayDirection, rayLength, excludedMeshes = undefine
 	}
 	return scene.pickWithRay(ray, (mesh) => !excludedMeshesFromRaycast.includes(mesh)); // Return final hit result of ray
 }
-/** @desc update this */
+/**
+ * @desc Shorthand for creating a skybox mesh (named "skybox") using the specified `rootURL` for specifying the location of the skybox textures
+ * @desc The `size` value is set to 1024 by default as well.
+ */
 export function createSkybox(rootUrl, size=1024) {
+	if(scene.getMeshByName("skybox")){console.error("Error: 'Skybox' object already exists");return;}
 	const skybox = BABYLON.MeshBuilder.CreateBox("skybox", {size:size}, scene);
 	const skyboxMaterial = new BABYLON.StandardMaterial("skybox", scene);
 	skyboxMaterial.backFaceCulling = false;
@@ -81,32 +135,6 @@ export function createSkybox(rootUrl, size=1024) {
 	skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
 	skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
 	skybox.material = skyboxMaterial;
-}
-/** @desc update this */
-export function initPlayerCamera() {
-	player.camera = new BABYLON.ArcRotateCamera(
-		"camera",
-		Math.PI / 2, // Alpha (horizontal rotation)
-		Math.PI / 3, // Beta (vertical rotation)
-		gameSettings.defaultCameraDistance, // Radius (distance from the target)
-		undefined, // Target (initialized later)
-		scene
-	);
-	player.camera.attachControl(canvas, true); // Attach camera controls to the canvas
-	player.camera.wheelPrecision = 150; // How much each scrollwheel scroll zooms the camera in/out
-	player.camera.lowerRadiusLimit = 0.25; // How close can the camera come to player
-	player.camera.upperRadiusLimit = 10; // How far can the camera go from the player
-	player.camera.minZ = 0.001; // Distance before camera starts to hide surfaces that are too close
-	//player.camera.checkCollisions = true; // Moves camera closer if being obscured by geometry
-}
-/** @desc update this */
-export function initScenePhysics() {
-	// See: https://doc.babylonjs.com/features/featuresDeepDive/animation/advanced_animations/#deterministic-lockstep
-	let physEngine = new BABYLON.CannonJSPlugin(false);
-	scene.enablePhysics(gameSettings.defaultGravity, physEngine); // Using Cannon.js for physics
-	physEngine.setTimeStep(1 / 60);
-	engine.renderEvenInBackground = false;
-	engine.deltaTime = 16;
 }
 
 //==================//
@@ -190,14 +218,15 @@ export function createHemisphereLight(name, position=vec3(), angles=vec3(), inte
  * @desc Initializes the default scene lighting, creating a directional "sun" light and hemisphere "ambient" light, pushing the sun light to the `game.shadowGenerators` as well
  * @todo This may not be necessary in the future, as I plan to have each level mesh contain all of the scene's lights
  */
-export function initDefaultLighting(){
+export function enableDefaultLighting(){
+	// Create & set ambient lighting with tiny intensity level (just so shadowed areas aren't 100% black)
+	/*let ambientLight = createHemisphereLight("ambient");
+	ambientLight.intensity = 0.025;*/
+	// TODO: Until I can find a fix for the "uniform buffers limit" being 12 while 13 lights are loaded, the above must stay commented out
 	// Create main light source (sun)
 	let sunLight = createDirectionalLight("sun", vec3(20, 50, 20), vec3(-1.5, -1.5, -Math.PI/2));
 	sunLight.intensity = 0.9;
 	sunLight.shadowMaxZ = 1000; // Necessary
-	// Create & set ambient lighting with tiny intensity level (just so shadowed areas aren't 100% black)
-	let ambientLight = createHemisphereLight("ambient");
-	ambientLight.intensity = 0.025;
 	// Create & init shadowGenerator for our single directional light (sunLight)
 	let sunLightShadow = new BABYLON.ShadowGenerator(1024 * 4, sunLight);
 	sunLightShadow.useContactHardeningShadow = true;
@@ -246,11 +275,6 @@ export function createMat(name, diffuseCol, specularCol = BABYLON.Color3.Black()
 	myMaterial.ambientColor = ambientCol;
 	return myMaterial;
 }
-
-//============//
-// UI HELPERS //
-//============//
-/* soon...? */
 
 //==============//
 // MESH HELPERS //
@@ -382,10 +406,85 @@ export function createMeshEvent(collisionMesh, onEnterOrExit, detectMesh, desire
 	return collisionMesh.actionManager; // Return the actionManager object
 }
 
+//==============//
+// MATH HELPERS //
+//==============//
+/**
+ * @desc Shorthands for `BABYLON.Vector3.Up()`, `.Down()`, etc
+ * @type {{up: BABYLON.Vector3, down: BABYLON.Vector3, right: BABYLON.Vector3, left: BABYLON.Vector3, forward: BABYLON.Vector3, backward: BABYLON.Vector3}}
+ * @example
+ * vec.up;
+ * // instead of:
+ * BABYLON.Vector3.Up();
+ */
+export let vec = {
+	up: vec3(0,1,0),
+	down: vec3(0,-1,0),
+	right: vec3(1,0,0),
+	left: vec3(-1,0,0),
+	forward: vec3(0,0,1),
+	backward: vec3(0,0,-1),
+}
+/**
+ * @desc Shorthand for `new BABYLON.Vector3(x,y,z)`, use `vec3(x,y,z)` instead for brevity
+ * @desc Default values are `0,0,0`, so `vec3()` is equivalent to `BABYLON.Vector3.Zero()`
+ */
+export function vec3(x=0,y=0,z=0){return new BABYLON.Vector3(x,y,z);}
+/**
+ * @desc Shorthand for `new BABYLON.Quaternion(x,y,z,w)`, use `quat(x,y,z,w)` instead for brevity
+ * @desc Default values are `0,0,0,0`, so `quat()` is equivalent to `BABYLON.Quaternion.Zero()`
+ */
+export function quat(x=0,y=0,z=0,w=0){return new BABYLON.Quaternion(x,y,z,w);}
+/**
+ * @desc Casts a ray below the player and gets the surface normal rotation value. By default, the `relativeToPlayer` parameter is true
+ */
+export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
+	// Perform the raycast to detect the mesh below the player
+	// TODO: Update `relativeToPlayer` ray direction to equal down direction of the player body's down direction, factoring in the body's current rotation (use getVecDifInDegrees() maybe?)
+	const hit = rayCast(mesh, relativeToPlayer = vec.down, rayLength);//scene.pickWithRay(downwardRay);
+
+	// Check if a mesh was hit
+	if (hit && hit.hit) {
+		//const pickedMesh = hit.pickedMesh;
+		const normal = hit.getNormal(true, false); // Get the normal vector at the hit point
+		//console.log("normal:",  normal, "pickedMesh.name:", pickedMesh.name);
+		if(relativeToPlayer !== vec.down){
+			const surfaceRotation = BABYLON.Quaternion.FromLookDirectionLH(
+				BABYLON.Vector3.Cross(vec.right.scale(-1), normal), // Compute look direction
+				normal
+			);
+			surfaceRotation.multiply(getPlayerDownDirection().toQuaternion());
+			return surfaceRotation.toEulerAngles();
+		}
+		if (normal) return normal; // If normal is not undefined, return the normal vector
+	}
+	return vec.up; // No hit detected, return "up" vector by default
+}
+/**
+ * @desc Returns the original vector, but clamped to the `maxLength` value
+ */
+export function clampVector3ToMaxLength(vector, maxLength) {
+	const length = vector.length(); // Get the magnitude of the vector
+	if (length > maxLength) {
+		return vector.scale(maxLength / length); // Scale down to the maximum length
+	}
+	return vector; // Return `vector` if it's already less than the `maxLength` value
+}
+/**
+ * @desc Untested/unused function
+ */
+export function getVecDifInDegrees(vec1, vec2){
+	return BABYLON.Tools.ToDegrees(Math.acos(BABYLON.Vector3.Dot(vec1.normalize(), vec2.normalize())))
+}
+
+//============//
+// UI HELPERS //
+//============//
+/* soon...? */
+
 //===============//
 // DEBUG HELPERS //
 //===============//
-let fixedLine, velocityLine;
 /**
  * @description Draws an ingame 3-axis helper at 0,0,0 which is then scaled by the `size` specified.
  * @param {number} size Determines the size of axisHelper created
@@ -440,47 +539,7 @@ export function showAxisHelper(size = 1, offset = vec3(0,0,0)) {
 	axisHelperMesh.checkCollisions = false;
 	return axisHelperMesh;
 }
-/**
- * @desc Casts a ray below the player and gets the surface normal rotation value. By default, the `relativeToPlayer` parameter is true
- */
-export function getSurfaceNormal(mesh, rayLength = 1, relativeToPlayer = true) {
-	// Perform the raycast to detect the mesh below the player
-	// TODO: Update `relativeToPlayer` ray direction to equal down direction of the player body's down direction, factoring in the body's current rotation (use getVecDifInDegrees() maybe?)
-	const hit = rayCast(mesh, relativeToPlayer = vec.down, rayLength);//scene.pickWithRay(downwardRay);
-
-	// Check if a mesh was hit
-	if (hit && hit.hit) {
-		//const pickedMesh = hit.pickedMesh;
-		const normal = hit.getNormal(true, false); // Get the normal vector at the hit point
-		//console.log("normal:",  normal, "pickedMesh.name:", pickedMesh.name);
-		if(relativeToPlayer !== vec.down){
-			const surfaceRotation = BABYLON.Quaternion.FromLookDirectionLH(
-				BABYLON.Vector3.Cross(vec.right.scale(-1), normal), // Compute look direction
-				normal
-			);
-			surfaceRotation.multiply(getPlayerDownDirection().toQuaternion());
-			return surfaceRotation.toEulerAngles();
-		}
-		if (normal) return normal; // If normal is not undefined, return the normal vector
-	}
-	return vec.up; // No hit detected, return "up" vector by default
-}
-/**
- * @desc Returns the original vector, but clamped to the `maxLength` value
- */
-export function clampVector3ToMaxLength(vector, maxLength) {
-	const length = vector.length(); // Get the magnitude of the vector
-	if (length > maxLength) {
-		return vector.scale(maxLength / length); // Scale down to the maximum length
-	}
-	return vector; // Return `vector` if it's already less than the `maxLength` value
-}
-/**
- * @desc Untested/unused function
- */
-export function getVecDifInDegrees(vec1, vec2){
-	return BABYLON.Tools.ToDegrees(Math.acos(BABYLON.Vector3.Dot(vec1.normalize(), vec2.normalize())))
-}
+let fixedLine, velocityLine;
 /**
  * @desc Untested/unused function
  */
@@ -535,19 +594,14 @@ export function createTrajectoryLines(mesh) {
 		}
 	};
 }
-
-
-//======//
-// MISC //
-//======//
 /**
  * JSDoc usage example
  *
  * @description Takes `size` of rectangle and returns the calculated area as a `string`.
  * @param {object} size - The width of the rectangle.
  * @param {boolean} roundResult - Should the result be rounded to nearest decimal place
- * @returns {string} The calculated area with units.
- * @throws {Error} Throws an error if width or height is negative.
+ * @returns {string || undefined} The calculated area with units.
+ * @throws {Error} Throws an error and returns `undefined` if width or height is negative.
  * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript
  * @example
  * // Basic usage:

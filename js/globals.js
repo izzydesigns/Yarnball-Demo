@@ -9,10 +9,23 @@ export const canvas = /** @type {HTMLCanvasElement} */ document.getElementById("
 /**
  * @desc This global variable contains the scene's `BABYLON.Engine` object
  * @desc Initialized immediately after the `canvas` variable has been fetched
+ * @type {BABYLON.Engine || BABYLON.WebGPUEngine}
  * */
-export const engine = new BABYLON.Engine(canvas, true, {
-    deterministicLockstep: true,lockstepMaxSteps: 4,
-    /* For testing shaders, enable: preserveDrawingBuffer: true,stencil: true,disableWebGL2Support: false*/}); // Init 3D engine
+export let engine;
+/**
+ * @desc Setter for the `engine` object
+ * */
+export function setEngine(desiredEngine){engine = desiredEngine;return engine;}
+/**
+ * @desc This global variable contains the global scene variable used in all other files
+ * @desc This gets initialized right away as well, creating the default scene immediately
+ * @type BABYLON.Scene
+ * */
+export let scene;
+/**
+ * @desc Setter for the `scene` object
+ * */
+export function setScene(desiredScene){scene = desiredScene;return scene;}
 /**
  * @desc This global variable contains all of the relevant data for the game itself
  * @desc This contains various important vars for things like the `game.time`, `game.paused`, and `game.currentFPS`, for example
@@ -37,7 +50,7 @@ export const game = {
  * */
 export const gameSettings = {
     defaultMoveSpeed: 1,
-    defaultMoveAccelerate: 0.04, // How quickly player reaches max horizontalSpeed, 0.2 = 5 frames later
+    defaultMoveAccelerate: 0.04, // How quickly player reaches max horizontalSpeed, +0.2 per frame = 5 frames long
     defaultMoveDelay: 0, // Pause duration before movement is allowed TODO: Set this to the specified turn anim's duration (if player.body is turning/rotating)
     defaultWalkSpeed: 0.5,
     defaultSprintSpeed: 3,
@@ -55,9 +68,9 @@ export const gameSettings = {
     defaultRotationSpeed: 0.025,
     defaultMaxSlopeAngle: 35,
     defaultSlopeAngle: 20,
-    defaultPlayerScale: 1, // Default amount to scale loaded player mesh up by (in all directions)
+    defaultPlayerScale: 1,
     defaultSpawnPoint: new BABYLON.Vector3(0,2,0), // Used if no "Spawnpoint" data point found in map file
-    defaultGravity: new BABYLON.Vector3(0, -9, 0), // Set gravity to value that `feels` right rather than real world values
+    defaultGravity: new BABYLON.Vector3(0, -9, 0),
     defaultMenu: "ingame",
     jumpDetectionBuffer: 0.05, // TODO: Scale this by `defaultPlayerScale` also
     controls: {
@@ -92,6 +105,7 @@ export const player = {
         isAfk: false,
     },
     onGround: false,
+    isSleeping: false,
     tiltDegrees: null,
     curMovementSpeed: gameSettings.defaultMoveSpeed,
     sprintSpeed: gameSettings.defaultSprintSpeed,
@@ -108,8 +122,3 @@ export const player = {
     camera: undefined,
     scale: gameSettings.defaultPlayerScale, // TODO: Adjust/scale final movement speed based on the player.scale value?
 };
-/**
- * @desc This global variable contains the global scene variable used in all other files
- * @desc This gets initialized right away as well, creating the default scene immediately
- * */
-export let scene = new BABYLON.Scene(engine); // This creates a basic Babylon Scene object (non-mesh)
