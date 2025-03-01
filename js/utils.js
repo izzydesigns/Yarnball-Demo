@@ -8,8 +8,9 @@ import {canvas, engine, game, gameSettings, player, scene, setEngine, setScene} 
  * @returns {BABYLON.Engine || BABYLON.WebGPUEngine} A new `BABYLON.Engine` or `BABYLON.WebGPUEngine` based on detected webGPU support
  */
 async function createNewEngine() {
-	const webGPUSupported = navigator.gpu;
-	console.log("Initializing game engine. WebGPU is "+(webGPUSupported?"":"not ")+"supported.");
+	const isFirefox = /firefox/i.test(navigator.userAgent);
+	const webGPUSupported = navigator.gpu && !isFirefox;
+	console.log("Initializing game engine. WebGPU is "+(webGPUSupported?"":"not ")+"supported."+(isFirefox?" (Disabled in Firefox)":""));
 	if (webGPUSupported) { // TODO: Fix WebGPUEngine issues, currently only WebGL 2.0 engine works...
 		return new BABYLON.WebGPUEngine(canvas, {
 			deterministicLockstep: true, lockstepMaxSteps: 4, antialias: true
