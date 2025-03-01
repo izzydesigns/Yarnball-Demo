@@ -1,16 +1,14 @@
 {
   "dependencies": {
-    "babylonjs": "^7.50.0",
-    "babylonjs-gui": "^7.50.0",
-    "babylonjs-gui-editor": "^7.50.0",
-    "babylonjs-loaders": "^7.50.0",
-    "babylonjs-materials": "^7.50.0",
-    "babylonjs-serializers": "^7.50.0",
+    "babylonjs": "^7.51.1",
+    "babylonjs-gui": "^7.51.1",
+    "babylonjs-loaders": "^7.51.1",
+    "babylonjs-materials": "^7.51.1",
     "bootstrap": "^5.3.3"
   },
   "devDependencies": {
     "http-server": "^14.1.1",
-    "sass": "^1.83.4"
+    "sass": "^1.85.1"
   },
   "scripts": {
     "start": "http-server"
